@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:mastra.ai)",
+      "WebFetch(domain:github.com)",
+      "WebSearch",
+      "WebFetch(domain:www.npmjs.com)",
+      "WebFetch(domain:serpapi.com)",
+      "WebFetch(domain:subho57.github.io)",
+      "WebFetch(domain:v03.api.js.langchain.com)",
+      "WebFetch(domain:docs.scrapecreators.com)",
+      "WebFetch(domain:scrapecreators.com)"
+    ]
+  }
+}

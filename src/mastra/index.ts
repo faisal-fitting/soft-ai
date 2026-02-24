@@ -3,13 +3,15 @@ import { Mastra } from '@mastra/core/mastra';
 import { PinoLogger } from '@mastra/loggers';
 import { LibSQLStore } from '@mastra/libsql';
 import { Observability, DefaultExporter, CloudExporter, SensitiveDataFilter } from '@mastra/observability';
-import { weatherWorkflow } from './workflows/weather-workflow';
-import { weatherAgent } from './agents/CBO-agent';
-
+import { businessAnalysisWorkflow } from './workflows/main-workflow';
+import { cboAgent } from './agents/CBO-agent';
+import { semanticAnalysisAgent } from './agents/sematic-analysis';
+import { socialEngagementAuditor } from './agents/social-engement-auditor';
+import { orchestratorAgent } from './agents/orchestrator-agent';
 
 export const mastra = new Mastra({
-  workflows: { weatherWorkflow },
-  agents: { weatherAgent },
+  workflows: { businessAnalysisWorkflow },
+  agents: { cboAgent, semanticAnalysisAgent, socialEngagementAuditor, orchestratorAgent },
   storage: new LibSQLStore({
     id: "mastra-storage",
     // stores observability, scores, ... into persistent file storage
@@ -32,5 +34,5 @@ export const mastra = new Mastra({
         ],
       },
     },
-  }),
+  })
 });
