@@ -149,14 +149,9 @@ async function fetchTikTok(handle: string, apiKey: string): Promise<z.infer<type
     return { username: handle, error: `TikTok fetch failed: ${String(err)}` };
   }
 
-  // ScrapeCreators mirrors TikTok's internal API — try both known response shapes
-  type TKStats  = { followerCount?: number; followingCount?: number; heartCount?: number; videoCount?: number };
-  type TKUser   = { uniqueId?: string; nickname?: string; signature?: string; verified?: boolean };
-  const userInfo = (profileRaw as { userInfo?: { user?: TKUser; stats?: TKStats } }).userInfo
-    ?? (profileRaw as { data?: { user?: TKUser; stats?: TKStats } }).data
-    ?? {};
-  const user  = (userInfo as { user?: TKUser }).user   ?? {};
-  const stats = (userInfo as { stats?: TKStats }).stats ?? {};
+  // ScrapeCreators mirrors TikTok's internal API
+  const user  = (profileRaw as any).user  ?? {};
+  const stats = (profileRaw as any).stats ?? {};
 
   // ── Videos ──
   let videos: Record<string, unknown>[] = [];
@@ -166,21 +161,20 @@ async function fetchTikTok(handle: string, apiKey: string): Promise<z.infer<type
       { headers: { 'x-api-key': apiKey } },
     );
     if (vRes.ok) {
-      const vData = await vRes.json() as { videos?: Record<string, unknown>[]; items?: Record<string, unknown>[] };
-      videos = vData.videos ?? vData.items ?? [];
+      const vData = await vRes.json() as any;
+      videos = vData.aweme_list ?? vData.videos ?? vData.items ?? [];
     }
   } catch (err) {
     console.warn('[social-scraper] TikTok videos error (non-fatal):', err);
   }
 
-  type VStats = { playCount?: number; diggCount?: number; commentCount?: number };
-  const recentVideos = videos.map((v) => {
-    const s = ((v as { stats?: VStats }).stats ?? {}) as VStats;
+  const recentVideos = videos.map((v: any) => {
+    const s = v.statistics ?? v.stats ?? {};
     return {
-      caption:  v.desc as string | undefined,
-      likes:    s.diggCount,
-      comments: s.commentCount,
-      views:    s.playCount,
+      caption:  v.desc,
+      likes:    s.digg_count ?? s.diggCount,
+      comments: s.comment_count ?? s.commentCount,
+      views:    s.play_count ?? s.playCount,
     };
   });
 

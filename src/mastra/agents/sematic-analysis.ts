@@ -53,6 +53,6 @@ When the user message starts with "COMPETITOR ANALYSIS MODE:", output only:
 - Opportunity: [one action the target business should take]
 Max 150 words. Use googleMapsReviewsTool to fetch reviews.
 `,
-  model: 'google/gemini-2.5-pro',
+  model: 'openrouter/google/gemini-2.5-pro',
   tools: { googleMapsReviewsTool },
 });

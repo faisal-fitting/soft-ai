@@ -421,7 +421,7 @@ Emit this exact table, filling every cell:
 - All SAR amounts formatted with commas (e.g., "SAR 45,000")
 - No HTML tags of any kind in the output
 `,
-  model: 'google/gemini-2.5-pro',
+  model: 'openrouter/google/gemini-2.5-pro',
   tools: {
     getPlaceDetails,
     googleMapsReviewsTool,

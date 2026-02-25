@@ -4,7 +4,7 @@ import { businessAnalysisTool } from '../tools/business-analysis-tool';
 export const orchestratorAgent = new Agent({
   id: 'orchestrator-agent',
   name: 'Business Analysis Orchestrator',
-  model: 'google/gemini-2.5-pro',
+  model: 'openrouter/google/gemini-2.5-pro',
   instructions: `
 You are the entry point for F&B business analysis. Your only job is to collect the
 required data from the user and then invoke the run-business-analysis tool.

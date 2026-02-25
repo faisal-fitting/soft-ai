@@ -60,7 +60,7 @@ Score based on:
 5. **Competitor Steal:** One specific tactic a competitor is using effectively that this business should adopt immediately
 6. **Quick Wins (2 actions):** Immediately implementable social media improvements
 `,
-  model: 'google/gemini-2.5-pro',
+  model: 'openrouter/google/gemini-2.5-pro',
   tools: {
     googleMapsReviewsTool,
     socialMediaScraperTool,
