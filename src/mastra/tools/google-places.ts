@@ -1,33 +1,9 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import axios from 'axios';
+import { placeDetailsSchema } from '../shared/schemas';
 
 const GOOGLE_API_KEY = process.env.GOOGLE_PLACES_API_KEY || 'AIzaSyAgbQvK5FZC_2liZ9mM6a7-HJSz8lC4CoQ';
-
-// ── Shared place schema ─────────────────────────────────────────────────────
-const placeSchema = z.object({
-  id: z.string(),
-  displayName: z.object({
-    text: z.string(),
-    languageCode: z.string().optional(),
-  }),
-  rating: z.number().optional(),
-  userRatingCount: z.number().optional(),
-  location: z.object({
-    latitude: z.number(),
-    longitude: z.number(),
-  }).optional(),
-  formattedAddress: z.string().optional(),
-  types: z.array(z.string()).optional(),
-  primaryType: z.string().optional(),
-  internationalPhoneNumber: z.string().optional(),
-  websiteUri: z.string().optional(),
-  regularOpeningHours: z.object({
-    openNow: z.boolean().optional(),
-    weekdayDescriptions: z.array(z.string()).optional(),
-  }).optional(),
-  priceLevel: z.string().optional(),
-});
 
 // ── getPlaceDetails ─────────────────────────────────────────────────────────
 export const getPlaceDetails = createTool({
@@ -38,7 +14,7 @@ export const getPlaceDetails = createTool({
   inputSchema: z.object({
     place_id: z.string().describe('Google Places API place ID (e.g. ChIJ...)'),
   }),
-  outputSchema: placeSchema,
+  outputSchema: placeDetailsSchema,
   execute: async ({ place_id }) => {
     const config = {
       method: 'get' as const,
@@ -48,7 +24,7 @@ export const getPlaceDetails = createTool({
         'X-Goog-Api-Key': GOOGLE_API_KEY,
         'X-Goog-FieldMask':
           'id,displayName,rating,userRatingCount,location,formattedAddress,' +
-          'types,primaryType,internationalPhoneNumber,websiteUri,' +
+          'types,primaryType,internationalPhoneNumber,nationalPhoneNumber,websiteUri,' +
           'regularOpeningHours,priceLevel',
       },
     };
@@ -71,13 +47,14 @@ export const getNearbyPlaces = createTool({
     lat: z.number().describe('Latitude of the center point'),
     lon: z.number().describe('Longitude of the center point'),
     radius: z.number().describe('Search radius in meters (500–5000)'),
+    includedTypes: z.array(z.string()).optional().describe('Place types to search for'),
   }),
   outputSchema: z.object({
-    places: z.array(placeSchema),
+    places: z.array(placeDetailsSchema),
   }),
-  execute: async ({ lat, lon, radius }) => {
+  execute: async ({ lat, lon, radius, includedTypes }) => {
     const body = {
-      includedTypes: ['cafe', 'coffee_shop', 'coffee_stand'],
+      includedTypes: includedTypes ?? ['cafe', 'coffee_shop', 'coffee_stand'],
       locationRestriction: {
         circle: {
           center: {
@@ -99,7 +76,7 @@ export const getNearbyPlaces = createTool({
         'X-Goog-Api-Key': GOOGLE_API_KEY,
         'X-Goog-FieldMask':
           'places.id,places.displayName,places.rating,places.userRatingCount,' +
-          'places.formattedAddress,places.location,places.types,places.primaryType',
+          'places.formattedAddress,places.location,places.types,places.primaryType,places.priceLevel',
         'Content-Type': 'application/json',
       },
       data: body,

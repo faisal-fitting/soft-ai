@@ -1,6 +1,7 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { getJson } from 'serpapi';
+import { reviewSchema, reviewsResponseSchema } from '../shared/schemas';
 
 const SERPAPI_KEY =
   process.env.SERPAPI_API_KEY ||
@@ -11,49 +12,12 @@ const SERPAPI_KEY =
  *   - Minimum for 15% trend threshold: need ≥6 mentions out of 40
  *   - Balances analytical accuracy vs. API latency (~4 calls ≈ 4–8 s)
  *   - Stops early when the business has fewer total reviews
- *
- * sort_by strategy:
+ * * sort_by strategy:
  *   - 'newestFirst'  → recommended for the target business (aligns with recency weighting)
  *   - 'qualityScore' → recommended for competitors (most representative sample)
  *   - 'ratingLow'    → optional deep-dive to surface critical failure patterns
  */
 const MAX_REVIEW_PAGES = 4;
-
-// ── Review schema (mirrors actual SerpAPI google_maps_reviews response) ───────
-const reviewSchema = z.object({
-  position: z.number(),
-  link: z.string().optional(),
-  rating: z.number(),
-  date: z.string(),
-  iso_date: z.string().optional(),
-  iso_date_of_last_edit: z.string().optional(),
-  images: z.array(z.string()).optional(),
-  source: z.string().optional(),
-  review_id: z.string().optional(),
-  user: z.object({
-    name: z.string(),
-    link: z.string().optional(),
-    contributor_id: z.string().optional(),
-    thumbnail: z.string().optional(),
-    local_guide: z.boolean().optional(),
-    reviews: z.number().optional(),
-    photos: z.number().optional(),
-  }),
-  snippet: z.string().optional(),
-  extracted_snippet: z.object({
-    original: z.string(),
-  }).optional(),
-  details: z.object({
-    food: z.number().optional(),
-    service: z.number().optional(),
-    atmosphere: z.number().optional(),
-    meal_type: z.string().optional(),
-    price_per_person: z.string().optional(),
-    noise_level: z.string().optional(),
-    wait_time: z.string().optional(),
-  }).optional(),
-  likes: z.number().optional(),
-});
 
 export const googleMapsReviewsTool = createTool({
   id: 'get-google-maps-reviews',
@@ -77,23 +41,7 @@ export const googleMapsReviewsTool = createTool({
         'ratingLow = lowest stars first (surfaces critical issues)',
       ),
   }),
-  outputSchema: z.object({
-    place_info: z.object({
-      title: z.string().optional(),
-      address: z.string().optional(),
-      rating: z.number().optional(),
-      reviews: z.number().optional(),
-      type: z.string().optional(),
-    }).optional(),
-    topics: z.array(z.object({
-      keyword: z.string(),
-      mentions: z.number(),
-      id: z.string().optional(),
-    })).optional(),
-    reviews: z.array(reviewSchema),
-    total_fetched: z.number(),
-    sort_used: z.string(),
-  }),
+  outputSchema: reviewsResponseSchema,
   execute: async ({ place_id, language, sort_by }) => {
     const hl = language ?? 'ar';
     const sortUsed = sort_by ?? 'qualityScore';
@@ -104,8 +52,6 @@ export const googleMapsReviewsTool = createTool({
 
     for (let page = 0; page < MAX_REVIEW_PAGES; page++) {
       try {
-        // Use object literal + conditional spread so TypeScript can infer
-        // the type from the literal (not from a generic Record variable)
         const result = await getJson({
           engine: 'google_maps_reviews',
           place_id,

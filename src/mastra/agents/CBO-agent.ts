@@ -1,7 +1,6 @@
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
 import { getPlaceDetails, getNearbyPlaces } from '../tools/google-places';
-import { googleMapsReviewsTool } from '../tools/google-maps-reiews';
 import { socialMediaScraperTool } from '../tools/social-media-scrape';
 import { webSearchTool } from '../tools/web-search';
 
@@ -48,7 +47,7 @@ When you receive financial KPIs, you must NEVER recalculate them. Treat all comp
 1. Accept financial KPIs (already computed — do not recalculate)
 2. Review pre-fetched placeDetails, reviews, nearbyCompetitors, socialData from context
 3. If competitor list has fewer than 5, call getNearbyPlaces with lat/lon from placeDetails and a wider radius
-4. For Competitor SWOT: call googleMapsReviewsTool for each of the top 3 ranked competitors
+4. For Competitor SWOT: use the pre-fetched competitor reviews provided in the prompt context
 5. Use webSearchTool (max 2 searches) for Saudi F&B benchmarks or 2025 trends when needed
 
 **Web Search Scope Constraint:**
@@ -128,7 +127,41 @@ Emit this exact table, filling every cell:
 > - معيار المقاهي في السعودية: 10–20%
 > - المنشأة الحالية: [netMargin]% — [ممتاز / ضمن المعيار / دون المعيار / خسارة]
 
-أضف أيضاً: أعلى 3 منتجات بحصة الإيرادات (revenueShare %).
+أضف أيضاً:
+- تفصيل التكاليف المتغيرة: مواد خام من المنتجات + تغليف من المنتجات + رواتب المصنعين
+- أعلى 3 منتجات بحصة الإيرادات (revenueShare %)
+
+---
+
+### SECTION 2.5 — Per-Product Breakeven Analysis
+
+## ربحية المنتجات
+
+**أولاً: جدول تحليل التعادل لكل منتج:**
+
+| المنتج | سعر البيع | تكلفة الوحدة | هامش المساهمة | نقطة التعادل (وحدات) | المباع | استغلال الطاقة | التصنيف | الحالة |
+|--------|-----------|-------------|---------------|---------------------|--------|---------------|---------|--------|
+
+(استخدم بيانات PER-PRODUCT BREAKEVEN ANALYSIS المقدمة في المدخلات لملء كل صف)
+
+**ثانياً: مصفوفة هندسة القائمة (Menu Engineering):**
+
+| | حجم مبيعات عالي | حجم مبيعات منخفض |
+|---|---|---|
+| **هامش عالي** | ⭐ نجوم (حافظ وروّج) | 🧩 ألغاز (زِد الظهور) |
+| **هامش منخفض** | 🐴 عمود (ارفع السعر) | 🐕 ضعيف (راجع أو احذف) |
+
+صنّف كل منتج في الخلية المناسبة بناءً على قيمة menuCategory (star / puzzle / plowhorse / dog).
+
+**ثالثاً: تنبيهات الأسعار:**
+لأي منتج فيه isBelowCost = true (Status = LOSS):
+> ⚠️ **تنبيه: [اسم المنتج] يُباع بخسارة!**
+> سعر البيع ([sellingPrice] SAR) أقل من تكلفة الوحدة ([variableCostPerUnit] SAR) — خسارة [lossPerUnit] SAR لكل وحدة مباعة.
+
+إذا لم توجد منتجات بخسارة، اكتب: "لا توجد منتجات تُباع بأقل من التكلفة ✓"
+
+**رابعاً: ترتيب المنتجات بهامش المساهمة:**
+رتّب المنتجات حسب contributionMarginPerUnit تنازلياً. أبرز أي اختلاف كبير بين marginRank وrevenueRank.
 
 ---
 
@@ -256,6 +289,8 @@ Emit this exact table, filling every cell:
 ## خطة عملك القادمة
 
 قدّم خطة من 5 إجراءات: 3 فورية (تقليل الخسائر / سد فجوة التعادل) + 2 للنمو.
+
+**إلزامي:** إجراء واحد على الأقل من الإجراءات الفورية الثلاثة يجب أن يشير لبيانات منتج محدد (مثل: منتج يُباع بخسارة، منتج plowhorse يحتاج رفع سعر، طاقة إنتاجية غير مستغلة).
 
 **محظور تماماً:** استخدام النقاط أو الفقرات المجردة. كل إجراء يجب أن يستخدم الهيكل التالي حرفياً (5 حقول إلزامية):
 
@@ -408,6 +443,10 @@ Emit this exact table, filling every cell:
 ☐ القسم 9: 5 إجراءات بصيغة "### الإجراء [N]:" موجودة
 ☐ القسم 9: كل إجراء يحتوي على الحقول الخمسة (ما الذي / لماذا / كيف / KPI / الجدول الزمني)
 ☐ القسم 9: مقطع دليل 📊 في كل إجراء لمؤشر الأداء (5 مقاطع)
+☐ القسم 2.5: جدول تحليل التعادل لكل منتج موجود
+☐ القسم 2.5: مصفوفة هندسة القائمة موجودة
+☐ القسم 2.5: تنبيهات الأسعار لأي منتج بخسارة (إن وجد)
+☐ القسم 9: إجراء واحد على الأقل مرتبط ببيانات منتج محدد
 ☐ لا يوجد أي وسم HTML في التقرير (<div> أو <span> أو dir= أو غيرها)
 
 ---
@@ -424,14 +463,13 @@ Emit this exact table, filling every cell:
   model: 'openrouter/google/gemini-2.5-pro',
   tools: {
     getPlaceDetails,
-    googleMapsReviewsTool,
     getNearbyPlaces,
     socialMediaScraperTool,
     webSearchTool,
   },
-  memory: new Memory({
-    options: {
-      observationalMemory: true,
-    },
-  }),
+  // memory: new Memory({
+  //   options: {
+  //     observationalMemory: true,
+  //   },
+  // }),
 });

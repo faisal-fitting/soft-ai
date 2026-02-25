@@ -1,6 +1,7 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
-import { businessAnalysisWorkflow, workflowInputSchema } from '../workflows/main-workflow';
+import { financialInputSchema } from '../shared/financials';
+import { businessAnalysisWorkflow } from '../workflows/main-workflow';
 
 export const businessAnalysisTool = createTool({
   id: 'run-business-analysis',
@@ -8,7 +9,7 @@ export const businessAnalysisTool = createTool({
     'Run the full F&B business analysis pipeline. ' +
     'Requires complete financial data, a Google Places placeId, and optional social handles. ' +
     'Returns a comprehensive Arabic business health report.',
-  inputSchema: workflowInputSchema,
+  inputSchema: financialInputSchema,
   outputSchema: z.object({ report: z.string() }),
   execute: async (inputData) => {
     const run = await businessAnalysisWorkflow.createRun();

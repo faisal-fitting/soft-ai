@@ -9,7 +9,15 @@
       "WebFetch(domain:subho57.github.io)",
       "WebFetch(domain:v03.api.js.langchain.com)",
       "WebFetch(domain:docs.scrapecreators.com)",
-      "WebFetch(domain:scrapecreators.com)"
+      "WebFetch(domain:scrapecreators.com)",
+      "Bash(wc:*)",
+      "Bash(find:*)",
+      "Bash(git:*)",
+      "WebFetch(domain:khaledgarbaya.net)",
+      "Bash(ls:*)",
+      "mcp__ide__getDiagnostics",
+      "Bash(head:*)",
+      "Bash(grep:*)"
     ]
   }
 }

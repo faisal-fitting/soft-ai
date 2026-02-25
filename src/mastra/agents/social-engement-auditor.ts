@@ -1,5 +1,4 @@
 import { Agent } from '@mastra/core/agent';
-import { googleMapsReviewsTool } from '../tools/google-maps-reiews';
 import { socialMediaScraperTool } from '../tools/social-media-scrape';
 
 export const socialEngagementAuditor = new Agent({
@@ -62,7 +61,6 @@ Score based on:
 `,
   model: 'openrouter/google/gemini-2.5-pro',
   tools: {
-    googleMapsReviewsTool,
     socialMediaScraperTool,
   },
 });

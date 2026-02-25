@@ -22,13 +22,19 @@ Revenue:
 - sales, returns, advertising, discounts (all numbers in SAR)
 
 Variable costs:
-- laborCosts, productionStaffCosts, packaging, rawMaterials (numbers in SAR)
+- productionStaffCosts (number in SAR — monthly barista/chef salaries)
 
 Fixed costs:
-- adminSalaries, adminExpenses, rent, utilities, subscriptions, govFees, otherCosts (numbers in SAR)
+- adminSalaries, adminExpenses, rent, utilities, subscriptions, govFees, serviceLaborCosts, otherCosts (numbers in SAR)
+  (serviceLaborCosts = عمال النظافة والتقديم — cleaning & service staff monthly salary)
 
 Items (array, at least one):
-- name (string), sellingPrice (number), soldUnits (number)
+- name (string)
+- sellingPrice (number — selling price per unit in SAR)
+- soldUnits (number — units sold this month)
+- rawMaterialCostPerUnit (number — تكلفة المواد الخام للوحدة)
+- packagingCostPerUnit (number — تكلفة التغليف للوحدة)
+- dailyProductionCapacity (number — السعة الإنتاجية اليومية)
 
 **Rules:**
 1. If ANY required field is missing, ask the user for it before calling the tool.

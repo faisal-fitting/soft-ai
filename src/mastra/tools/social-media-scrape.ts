@@ -1,52 +1,12 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
+import {
+  instagramProfileSchema,
+  tiktokProfileSchema,
+  socialDataSchema,
+} from '../shared/schemas';
 
 const BASE_URL = 'https://api.scrapecreators.com';
-
-// ── Sub-schemas ─────────────────────────────────────────────────────────────
-const postSchema = z.object({
-  caption: z.string().optional(),
-  likes: z.number().optional(),
-  comments: z.number().optional(),
-  views: z.number().optional(),
-  isReel: z.boolean().optional(),
-  url: z.string().optional(),
-  date: z.string().optional(),
-});
-
-const instagramProfileSchema = z.object({
-  username: z.string(),
-  fullName: z.string().optional(),
-  bio: z.string().optional(),
-  followers: z.number().optional(),
-  following: z.number().optional(),
-  postsCount: z.number().optional(),
-  isVerified: z.boolean().optional(),
-  isBusinessAccount: z.boolean().optional(),
-  categoryName: z.string().optional(),
-  avgLikes: z.number().optional(),
-  avgComments: z.number().optional(),
-  avgViews: z.number().optional(),
-  engagementRate: z.number().optional(),
-  recentPosts: z.array(postSchema).optional(),
-  error: z.string().optional(),
-});
-
-const tiktokProfileSchema = z.object({
-  username: z.string(),
-  displayName: z.string().optional(),
-  bio: z.string().optional(),
-  followers: z.number().optional(),
-  following: z.number().optional(),
-  likes: z.number().optional(),
-  videosCount: z.number().optional(),
-  avgViews: z.number().optional(),
-  avgLikes: z.number().optional(),
-  avgComments: z.number().optional(),
-  engagementRate: z.number().optional(),
-  recentVideos: z.array(postSchema).optional(),
-  error: z.string().optional(),
-});
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 function avg(nums: number[]): number {
@@ -217,11 +177,7 @@ export const socialMediaScraperTool = createTool({
     instagram_user: z.string().describe('Instagram username without @'),
     tiktok_user: z.string().describe('TikTok username without @'),
   }),
-  outputSchema: z.object({
-    instagram: instagramProfileSchema,
-    tiktok: tiktokProfileSchema,
-    note: z.string().optional(),
-  }),
+  outputSchema: socialDataSchema,
   execute: async ({ instagram_user, tiktok_user }) => {
     const apiKey = process.env.SCRAPE_CREATORS_API_KEY || "lo6KXLFenDW6YkxHO0VrSkAdLkg2";
 
