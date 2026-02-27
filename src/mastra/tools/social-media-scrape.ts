@@ -1,4 +1,5 @@
 import { createTool } from '@mastra/core/tools';
+import axios from 'axios';
 import { z } from 'zod';
 import {
   instagramProfileSchema,
@@ -6,167 +7,240 @@ import {
   socialDataSchema,
 } from '../shared/schemas';
 
-const BASE_URL = 'https://api.scrapecreators.com';
+// ── Axios instance ────────────────────────────────────────────────────────────
+const scraperClient = axios.create({
+  baseURL: 'https://api.scrapecreators.com',
+  timeout: 12_000,
+});
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+function headers(apiKey: string) {
+  return { 'x-api-key': apiKey };
+}
+
+// ── Raw API types ─────────────────────────────────────────────────────────────
+interface TtVideoStats {
+  digg_count?: number;    diggCount?: number;
+  comment_count?: number; commentCount?: number;
+  play_count?: number;    playCount?: number;
+  share_count?: number;   shareCount?: number;
+  collect_count?: number; collectCount?: number;
+}
+
+interface TtVideo {
+  desc?: string;
+  statistics?: TtVideoStats;
+  stats?: TtVideoStats;
+  create_time?: number;
+  create_time_utc?: string;
+  video?: { duration?: number }; // milliseconds
+  url?: string;
+  share_url?: string;
+}
+
+interface IgReelMediaItem {
+  taken_at?: number;
+  like_count?: number;
+  comment_count?: number;
+  play_count?: number;
+  ig_play_count?: number;
+  video_duration?: number; // seconds
+  url?: string;
+}
+
+interface IgReelItem { media?: IgReelMediaItem; }
+
+interface IgReelsResponse {
+  items?: IgReelItem[];
+  paging_info?: { max_id?: string; more_available?: boolean };
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
 function avg(nums: number[]): number {
   if (nums.length === 0) return 0;
   return nums.reduce((a, b) => a + b, 0) / nums.length;
 }
 
-async function fetchInstagram(handle: string, apiKey: string): Promise<z.infer<typeof instagramProfileSchema>> {
-  // ── Profile ────────────────────────────────────────────────────────────────
-  let profileData: Record<string, unknown> = {};
-  try {
-    const profileRes = await fetch(
-      `${BASE_URL}/v1/instagram/profile?handle=${encodeURIComponent(handle)}&trim=true`,
-      { headers: { 'x-api-key': apiKey } },
-    );
-    if (!profileRes.ok) {
-      throw new Error(`Profile request failed: ${profileRes.status} ${profileRes.statusText}`);
-    }
-    profileData = await profileRes.json() as Record<string, unknown>;
-  } catch (err) {
-    console.error('[social-scraper] Instagram profile error:', err);
-    return { username: handle, error: `Profile fetch failed: ${String(err)}` };
-  }
+function computePostsPerWeek(dates: (string | undefined)[]): number | undefined {
+  const timestamps = dates
+    .filter((d): d is string => Boolean(d))
+    .map((d) => new Date(d).getTime())
+    .filter((t) => !isNaN(t));
+  if (timestamps.length < 2) return undefined;
+  const spanMs = Math.max(...timestamps) - Math.min(...timestamps);
+  const weeks = spanMs / (7 * 24 * 60 * 60 * 1000);
+  return weeks > 0 ? Math.round((timestamps.length / weeks) * 10) / 10 : undefined;
+}
 
-  const user = (profileData as { data?: { user?: Record<string, unknown> } }).data?.user ?? {};
+// ── Instagram ─────────────────────────────────────────────────────────────────
+async function fetchInstagramRaw(handle: string, apiKey: string) {
+  const [profileRes, postsRes, reelsRes] = await Promise.all([
+    scraperClient.get(`/v1/instagram/profile?handle=${encodeURIComponent(handle)}&trim=true`, { headers: headers(apiKey) }),
+    scraperClient.get(`/v2/instagram/user/posts?handle=${encodeURIComponent(handle)}&trim=true`, { headers: headers(apiKey) })
+      .catch(() => null),
+    scraperClient.get<IgReelsResponse>(
+      `/v1/instagram/user/reels?handle=${encodeURIComponent(handle)}&trim=true`,
+      { headers: headers(apiKey) },
+    ).catch(() => null),
+  ]);
+  return {
+    profileData: profileRes.data,
+    postsData:   postsRes?.data  ?? {},
+    reelsData:   (reelsRes?.data ?? {}) as IgReelsResponse,
+  };
+}
 
-  const followers = ((user.edge_followed_by as { count?: number })?.count) ?? 0;
+function computeInstagramMetrics(
+  handle: string,
+  profileData: Record<string, unknown>,
+  postsData: Record<string, unknown>,
+  reelsData: IgReelsResponse,
+): z.infer<typeof instagramProfileSchema> {
+  const user = (profileData as any).data?.user ?? {};
+  const followers = user.edge_followed_by?.count ?? 0;
 
-  // ── Posts ─────────────────────────────────────────────────────────────────
-  let items: Record<string, unknown>[] = [];
-  try {
-    const postsRes = await fetch(
-      `${BASE_URL}/v2/instagram/user/posts?handle=${encodeURIComponent(handle)}&trim=true`,
-      { headers: { 'x-api-key': apiKey } },
-    );
-    if (postsRes.ok) {
-      const postsData = await postsRes.json() as { items?: Record<string, unknown>[] };
-      items = postsData.items ?? [];
-    }
-  } catch (err) {
-    console.warn('[social-scraper] Instagram posts error (non-fatal):', err);
-  }
+  // Static posts only (media_type !== 2) — keeps captions
+  const items: any[] = (postsData as any).items ?? [];
+  const recentPosts = items
+    .filter((item: any) => item.media_type !== 2)
+    .map((item: any) => ({
+      caption:  item.caption?.text,
+      likes:    item.like_count,
+      comments: item.comment_count,
+      isReel:   false,
+      url:      item.url,
+      date:     item.taken_at ? new Date(item.taken_at * 1000).toISOString() : undefined,
+    }));
 
-  const recentPosts = items.map((item) => {
-    const caption = item.caption as { text?: string } | undefined;
-    const isReel = item.media_type === 2;
-    const playCount = (item.play_count as number | undefined) ?? (item.ig_play_count as number | undefined);
-    return {
-      caption: caption?.text,
-      likes: (item.like_count as number | undefined),
-      comments: (item.comment_count as number | undefined),
-      views: isReel ? playCount : undefined,
-      isReel,
-      url: item.url as string | undefined,
-      date: item.taken_at ? new Date((item.taken_at as number) * 1000).toISOString() : undefined,
-    };
-  });
+  // Reels from dedicated endpoint — accurate view counts, no captions
+  const reelItems: IgReelMediaItem[] = (reelsData.items ?? [])
+    .map((ri) => ri.media)
+    .filter((m): m is IgReelMediaItem => Boolean(m));
 
-  const likeList = recentPosts.map((p) => p.likes ?? 0);
-  const commentList = recentPosts.map((p) => p.comments ?? 0);
-  const reelViews = recentPosts.filter((p) => p.isReel && p.views != null).map((p) => p.views!);
+  const recentReels = reelItems.map((m) => ({
+    likes:    m.like_count,
+    comments: m.comment_count,
+    views:    m.ig_play_count ?? m.play_count,
+    isReel:   true,
+    url:      m.url,
+    date:     m.taken_at ? new Date(m.taken_at * 1000).toISOString() : undefined,
+    duration: m.video_duration, // already in seconds
+  }));
 
-  const avgLikes = avg(likeList);
-  const avgComments = avg(commentList);
-  const avgViews = reelViews.length > 0 ? avg(reelViews) : undefined;
+  // Averages: likes/comments across static + reels; views only from reels endpoint
+  const allPosts = [...recentPosts, ...recentReels];
+  const avgLikes    = avg(allPosts.map((p) => p.likes    ?? 0));
+  const avgComments = avg(allPosts.map((p) => p.comments ?? 0));
+
+  const reelViewValues = recentReels
+    .filter((r) => r.views != null)
+    .map((r) => r.views!);
+  const avgViews = reelViewValues.length > 0 ? avg(reelViewValues) : undefined;
+
   const engagementRate = followers > 0
     ? ((avgLikes + avgComments) / followers) * 100
     : undefined;
 
+  const postsPerWeek = computePostsPerWeek([
+    ...recentPosts.map((p) => p.date),
+    ...recentReels.map((r) => r.date),
+  ]);
+
+  console.log(`[social-scraper] Instagram @${handle} — followers: ${followers || 'n/a'}`);
   return {
-    username: (user.username as string | undefined) ?? handle,
-    fullName: user.full_name as string | undefined,
-    bio: user.biography as string | undefined,
-    followers,
-    following: ((user.edge_follow as { count?: number })?.count) ?? undefined,
-    postsCount: ((user.edge_owner_to_timeline_media as { count?: number })?.count) ?? undefined,
-    isVerified: user.is_verified as boolean | undefined,
-    isBusinessAccount: user.is_business_account as boolean | undefined,
-    categoryName: user.category_name as string | undefined,
-    avgLikes,
-    avgComments,
-    ...(avgViews !== undefined ? { avgViews } : {}),
+    username:          user.username   ?? handle,
+    fullName:          user.full_name,
+    bio:               user.biography,
+    followers:         followers || undefined,
+    following:         user.edge_follow?.count,
+    postsCount:        user.edge_owner_to_timeline_media?.count,
+    isVerified:        user.is_verified,
+    isBusinessAccount: user.is_business_account,
+    categoryName:      user.category_name,
+    avgLikes, avgComments,
+    ...(avgViews       !== undefined ? { avgViews }       : {}),
     ...(engagementRate !== undefined ? { engagementRate } : {}),
-    recentPosts,
+    ...(postsPerWeek   !== undefined ? { postsPerWeek }   : {}),
+    recentPosts:  recentPosts.length  > 0 ? recentPosts  : undefined,
+    recentReels:  recentReels.length  > 0 ? recentReels  : undefined,
   };
 }
 
-async function fetchTikTok(handle: string, apiKey: string): Promise<z.infer<typeof tiktokProfileSchema>> {
-  // ── Profile ──
-  let profileRaw: Record<string, unknown> = {};
-  try {
-    const res = await fetch(
-      `${BASE_URL}/v1/tiktok/profile?handle=${encodeURIComponent(handle)}&trim=true`,
-      { headers: { 'x-api-key': apiKey } },
-    );
-    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-    profileRaw = await res.json() as Record<string, unknown>;
-  } catch (err) {
-    console.error('[social-scraper] TikTok profile error:', err);
-    return { username: handle, error: `TikTok fetch failed: ${String(err)}` };
-  }
+// ── TikTok ────────────────────────────────────────────────────────────────────
+async function fetchTikTokRaw(handle: string, apiKey: string) {
+  const [profileRes, videosRes] = await Promise.all([
+    scraperClient.get(`/v1/tiktok/profile?handle=${encodeURIComponent(handle)}`, { headers: headers(apiKey) }),
+    scraperClient.get(`/v3/tiktok/profile/videos?handle=${encodeURIComponent(handle)}&amount=10&trim=true`, { headers: headers(apiKey) })
+      .catch(() => null),
+  ]);
+  return { profileData: profileRes.data, videosData: videosRes?.data ?? {} };
+}
 
-  // ScrapeCreators mirrors TikTok's internal API
-  const user  = (profileRaw as any).user  ?? {};
-  const stats = (profileRaw as any).stats ?? {};
+function computeTikTokMetrics(
+  handle: string,
+  profileData: Record<string, unknown>,
+  videosData: Record<string, unknown>,
+): z.infer<typeof tiktokProfileSchema> {
+  const user  = (profileData as any).user  ?? {};
+  const stats = (profileData as any).stats ?? {};
 
-  // ── Videos ──
-  let videos: Record<string, unknown>[] = [];
-  try {
-    const vRes = await fetch(
-      `${BASE_URL}/v3/tiktok/profile/videos?handle=${encodeURIComponent(handle)}&amount=10&trim=true`,
-      { headers: { 'x-api-key': apiKey } },
-    );
-    if (vRes.ok) {
-      const vData = await vRes.json() as any;
-      videos = vData.aweme_list ?? vData.videos ?? vData.items ?? [];
-    }
-  } catch (err) {
-    console.warn('[social-scraper] TikTok videos error (non-fatal):', err);
-  }
-
-  const recentVideos = videos.map((v: any) => {
-    const s = v.statistics ?? v.stats ?? {};
+  const videos: TtVideo[] = (videosData as any).aweme_list ?? (videosData as any).videos ?? (videosData as any).items ?? [];
+  const recentVideos = videos.map((v) => {
+    const s: TtVideoStats = v.statistics ?? v.stats ?? {};
+    const durationMs = v.video?.duration;
+    const date = v.create_time_utc
+      ? v.create_time_utc
+      : v.create_time
+        ? new Date(v.create_time * 1000).toISOString()
+        : undefined;
     return {
       caption:  v.desc,
-      likes:    s.digg_count ?? s.diggCount,
+      likes:    s.digg_count    ?? s.diggCount,
       comments: s.comment_count ?? s.commentCount,
-      views:    s.play_count ?? s.playCount,
+      views:    s.play_count    ?? s.playCount,
+      shares:   s.share_count   ?? s.shareCount,
+      saves:    s.collect_count ?? s.collectCount,
+      duration: durationMs != null ? Math.round(durationMs / 1000) : undefined,
+      url:      v.url ?? v.share_url,
+      date,
     };
   });
 
-  const playList    = recentVideos.map((v) => v.views    ?? 0);
-  const likeList    = recentVideos.map((v) => v.likes    ?? 0);
-  const commentList = recentVideos.map((v) => v.comments ?? 0);
-  const followers   = stats.followerCount ?? 0;
-  const avgViews    = playList.length    > 0 ? avg(playList)    : undefined;
-  const avgLikes    = likeList.length    > 0 ? avg(likeList)    : undefined;
-  const avgComments = commentList.length > 0 ? avg(commentList) : undefined;
-  const engagementRate = followers > 0 && avgLikes !== undefined && avgComments !== undefined
+  const followers   = stats.followerCount || undefined;
+  const avgViews    = recentVideos.length > 0 ? avg(recentVideos.map((v) => v.views    ?? 0)) : undefined;
+  const avgLikes    = recentVideos.length > 0 ? avg(recentVideos.map((v) => v.likes    ?? 0)) : undefined;
+  const avgComments = recentVideos.length > 0 ? avg(recentVideos.map((v) => v.comments ?? 0)) : undefined;
+  const engagementRate = followers && avgLikes !== undefined && avgComments !== undefined
     ? ((avgLikes + avgComments) / followers) * 100
     : undefined;
 
-  console.log(`[social-scraper] TikTok @${handle} — followers: ${followers}`);
+  const shareValues = recentVideos.map((v) => v.shares ?? 0);
+  const saveValues  = recentVideos.map((v) => v.saves  ?? 0);
+  const avgShareCount = recentVideos.length > 0 ? avg(shareValues) : undefined;
+  const avgSaveCount  = recentVideos.length > 0 ? avg(saveValues)  : undefined;
+
+  const postsPerWeek = computePostsPerWeek(recentVideos.map((v) => v.date));
+
+  console.log(`[social-scraper] TikTok @${handle} — followers: ${followers ?? 'n/a'}`);
   return {
-    username:    user.uniqueId   ?? handle,
+    username:    user.uniqueId ?? handle,
     displayName: user.nickname,
     bio:         user.signature,
     followers,
     following:   stats.followingCount,
     likes:       stats.heartCount,
     videosCount: stats.videoCount,
-    ...(avgViews    !== undefined ? { avgViews }    : {}),
-    ...(avgLikes    !== undefined ? { avgLikes }    : {}),
-    ...(avgComments !== undefined ? { avgComments } : {}),
-    ...(engagementRate !== undefined ? { engagementRate } : {}),
+    ...(avgViews        !== undefined ? { avgViews }        : {}),
+    ...(avgLikes        !== undefined ? { avgLikes }        : {}),
+    ...(avgComments     !== undefined ? { avgComments }     : {}),
+    ...(engagementRate  !== undefined ? { engagementRate }  : {}),
+    ...(avgShareCount   !== undefined ? { avgShareCount }   : {}),
+    ...(avgSaveCount    !== undefined ? { avgSaveCount }    : {}),
+    ...(postsPerWeek    !== undefined ? { postsPerWeek }    : {}),
     recentVideos,
   };
 }
 
-// ── Tool ─────────────────────────────────────────────────────────────────────
+// ── Tool ──────────────────────────────────────────────────────────────────────
 export const socialMediaScraperTool = createTool({
   id: 'scrape-social-media',
   description:
@@ -179,29 +253,33 @@ export const socialMediaScraperTool = createTool({
   }),
   outputSchema: socialDataSchema,
   execute: async ({ instagram_user, tiktok_user }) => {
-    const apiKey = process.env.SCRAPE_CREATORS_API_KEY || "lo6KXLFenDW6YkxHO0VrSkAdLkg2";
+    const apiKey = process.env.SCRAPE_CREATORS_API_KEY!;
 
-    // Strip @ prefix defensively from both handles
     const igHandle = instagram_user.replace(/^@/, '');
     const ttHandle = tiktok_user.replace(/^@/, '');
 
     if (!apiKey) {
-      console.warn('[social-scraper] SCRAPE_CREATORS_API_KEY not set — returning stub data.');
+      console.warn('[social-scraper] SCRAPE_CREATORS_API_KEY not set.');
       return {
         instagram: { username: igHandle, error: 'SCRAPE_CREATORS_API_KEY not configured' },
-        tiktok: { username: ttHandle, error: 'SCRAPE_CREATORS_API_KEY not configured' },
-        note: 'Set SCRAPE_CREATORS_API_KEY env var to enable live social media data.',
+        tiktok:    { username: ttHandle, error: 'SCRAPE_CREATORS_API_KEY not configured' },
       };
     }
 
-    // ── Instagram ────────────────────────────────────────────────────────────
-    const instagram = await fetchInstagram(igHandle, apiKey);
+    const [igResult, ttResult] = await Promise.allSettled([
+      igHandle
+        ? fetchInstagramRaw(igHandle, apiKey).then(({ profileData, postsData, reelsData }) =>
+            computeInstagramMetrics(igHandle, profileData, postsData, reelsData))
+        : Promise.resolve({ username: '' } as z.infer<typeof instagramProfileSchema>),
+      ttHandle
+        ? fetchTikTokRaw(ttHandle, apiKey).then(({ profileData, videosData }) =>
+            computeTikTokMetrics(ttHandle, profileData, videosData))
+        : Promise.resolve({ username: '' } as z.infer<typeof tiktokProfileSchema>),
+    ]);
 
-    // ── TikTok ───────────────────────────────────────────────────────────────
-    const tiktok = ttHandle
-      ? await fetchTikTok(ttHandle, apiKey)
-      : { username: '' };
-
-    return { instagram, tiktok };
+    return {
+      instagram: igResult.status === 'fulfilled' ? igResult.value : { username: igHandle, error: String((igResult as PromiseRejectedResult).reason) },
+      tiktok: ttResult.status === 'fulfilled' ? ttResult.value : { username: ttHandle, error: String((ttResult as PromiseRejectedResult).reason) },
+    };
   },
 });

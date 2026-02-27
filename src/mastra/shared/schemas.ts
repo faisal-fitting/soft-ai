@@ -96,6 +96,9 @@ export const postSchema = z.object({
   isReel: z.boolean().optional(),
   url: z.string().optional(),
   date: z.string().optional(),
+  duration: z.number().optional(), // seconds (both platforms)
+  shares: z.number().optional(),   // TikTok only
+  saves: z.number().optional(),    // TikTok only
 });
 
 export const instagramProfileSchema = z.object({
@@ -112,7 +115,9 @@ export const instagramProfileSchema = z.object({
   avgComments: z.number().optional(),
   avgViews: z.number().optional(),
   engagementRate: z.number().optional(),
+  postsPerWeek: z.number().optional(),
   recentPosts: z.array(postSchema).optional(),
+  recentReels: z.array(postSchema).optional(), // accurate views, no captions
   error: z.string().optional(),
 });
 
@@ -128,6 +133,9 @@ export const tiktokProfileSchema = z.object({
   avgLikes: z.number().optional(),
   avgComments: z.number().optional(),
   engagementRate: z.number().optional(),
+  postsPerWeek: z.number().optional(),
+  avgShareCount: z.number().optional(),
+  avgSaveCount: z.number().optional(),
   recentVideos: z.array(postSchema).optional(),
   error: z.string().optional(),
 });

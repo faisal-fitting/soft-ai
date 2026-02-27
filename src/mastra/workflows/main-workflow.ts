@@ -342,6 +342,7 @@ const generateReport = createStep({
 
     const {
       businessName, businessType, placeId,
+      instagramUser, tiktokUser,
       netRevenue, variableCosts, fixedCosts, totalCosts,
       grossProfit, netProfit, grossMargin, netMargin,
       contributionMarginRatio, breakEvenRevenue, breakEvenGap, isAboveBreakEven,
@@ -383,6 +384,10 @@ const generateReport = createStep({
 
     const prompt = `
 Generate a comprehensive F&B Business Intelligence Report for **${businessName}** (${businessType}).
+
+## SOCIAL HANDLES (use these for the §0 business card)
+- Instagram: ${instagramUser ? '@' + instagramUser : 'Not provided'}
+- TikTok: ${tiktokUser ? '@' + tiktokUser : 'Not provided'}
 
 ## FINANCIAL KPIs (DO NOT RECALCULATE — treat as absolute facts)
 - Net Revenue: ${netRevenue.toFixed(2)} SAR
@@ -451,9 +456,6 @@ Calculate the Hybrid Health Score using the formula from your instructions.
   },
 });
 
-// ────────────────────────────────────────────────────────────────────────────
-// NESTED WORKFLOW — Process Single Competitor (fetch reviews → analyze)
-// ────────────────────────────────────────────────────────────────────────────
 const processCompetitor = createWorkflow({
   id: 'process-competitor',
   inputSchema: reviewInputSchema,

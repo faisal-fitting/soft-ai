@@ -1,5 +1,6 @@
 import { Agent } from '@mastra/core/agent';
 import { businessAnalysisTool } from '../tools/business-analysis-tool';
+import { Memory } from '@mastra/memory';
 
 export const orchestratorAgent = new Agent({
   id: 'orchestrator-agent',
@@ -43,4 +44,5 @@ Items (array, at least one):
 4. Never attempt to compute financial KPIs yourself. The tool handles all calculations.
 `,
   tools: { businessAnalysisTool },
+  memory: new Memory()
 });

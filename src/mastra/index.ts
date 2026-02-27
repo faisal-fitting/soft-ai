@@ -6,7 +6,7 @@ import { Observability, DefaultExporter, CloudExporter, SensitiveDataFilter } fr
 import { businessAnalysisWorkflow } from './workflows/main-workflow';
 import { cboAgent } from './agents/CBO-agent';
 import { semanticAnalysisAgent } from './agents/sematic-analysis';
-import { socialEngagementAuditor } from './agents/social-engement-auditor';
+import { socialEngagementAuditor } from './agents/social-engagement-auditor';
 import { orchestratorAgent } from './agents/orchestrator-agent';
 
 export const mastra = new Mastra({

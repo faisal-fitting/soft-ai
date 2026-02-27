@@ -17,7 +17,9 @@
       "Bash(ls:*)",
       "mcp__ide__getDiagnostics",
       "Bash(head:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(node:*)",
+      "Bash(cd /c/Users/noc-9/Documents/soft-ai && npx tsc --noEmit 2>&1)"
     ]
   }
 }
