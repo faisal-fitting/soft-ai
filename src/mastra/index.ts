@@ -5,13 +5,14 @@ import { LibSQLStore } from '@mastra/libsql';
 import { Observability, DefaultExporter, CloudExporter, SensitiveDataFilter } from '@mastra/observability';
 import { businessAnalysisWorkflow } from './workflows/main-workflow';
 import { cboAgent } from './agents/CBO-agent';
+import { cboSynthesisAgent } from './agents/cbo-synthesis-agent';
 import { semanticAnalysisAgent } from './agents/sematic-analysis';
 import { socialEngagementAuditor } from './agents/social-engagement-auditor';
 import { orchestratorAgent } from './agents/orchestrator-agent';
 
 export const mastra = new Mastra({
   workflows: { businessAnalysisWorkflow },
-  agents: { cboAgent, semanticAnalysisAgent, socialEngagementAuditor, orchestratorAgent },
+  agents: { cboAgent, cboSynthesisAgent, semanticAnalysisAgent, socialEngagementAuditor },
   storage: new LibSQLStore({
     id: "mastra-storage",
     // stores observability, scores, ... into persistent file storage
@@ -35,4 +36,4 @@ export const mastra = new Mastra({
       },
     },
   })
-});
+})

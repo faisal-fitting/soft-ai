@@ -1,4 +1,5 @@
 import { Agent } from '@mastra/core/agent';
+import { Memory } from '@mastra/memory';
 
 export const semanticAnalysisAgent = new Agent({
   id: 'semantic-analysis-agent',
@@ -52,6 +53,7 @@ When the user message starts with "COMPETITOR ANALYSIS MODE:", output only:
 - Opportunity: [one action the target business should take]
 Max 150 words. Reviews are provided in the prompt — do not attempt to fetch them.
 `,
-  model: 'openrouter/google/gemini-2.5-pro',
+  model: 'google/gemini-2.5-pro',
+  memory: new Memory(),
   tools: {},
 });

@@ -19,7 +19,8 @@
       "Bash(head:*)",
       "Bash(grep:*)",
       "Bash(node:*)",
-      "Bash(cd /c/Users/noc-9/Documents/soft-ai && npx tsc --noEmit 2>&1)"
+      "Bash(cd /c/Users/noc-9/Documents/soft-ai && npx tsc --noEmit 2>&1)",
+      "WebFetch(domain:deepwiki.com)"
     ]
   }
 }

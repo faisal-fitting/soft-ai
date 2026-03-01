@@ -353,8 +353,8 @@ const generateReport = createStep({
       competitorAnalyses,
     } = inputData;
 
-    const cboAgent = mastra?.getAgent('cboAgent');
-    if (!cboAgent) throw new Error('CBO agent not found');
+    const synthesisAgent = mastra?.getAgent('cboSynthesisAgent');
+    if (!synthesisAgent) throw new Error('CBO Synthesis agent not found');
 
     // Build per-product breakeven table
     const perProductTable = items.map((i) =>
@@ -446,7 +446,7 @@ Calculate the Hybrid Health Score using the formula from your instructions.
 **MANDATORY: Write the entire report in Arabic. Section headers may be in English, but all analysis, insights, and recommendations must be in Arabic.**
 `;
 
-    const response = await cboAgent.generate([
+    const response = await synthesisAgent.generate([
       { role: 'user', content: prompt },
     ]);
 

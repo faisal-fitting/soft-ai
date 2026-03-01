@@ -1,4 +1,5 @@
 import { Agent } from '@mastra/core/agent';
+import { Memory } from '@mastra/memory';
 import { socialMediaScraperTool } from '../tools/social-media-scrape';
 
 export const socialEngagementAuditor = new Agent({
@@ -59,7 +60,7 @@ Score based on:
 
 1. **Social Health Score (1–10):** [Score] — [One-line rationale citing the 2 biggest contributing factors]
 
-2. **Instagram Account:** @[exact scraped username from tool output] | URL: https://www.instagram.com/[scraped_username]/
+2. **Instagram Account:** @[instagram.username from data] | URL: [use instagram.profileUrl from data exactly as-is — do NOT construct it yourself]
    - Followers: [count] | Following: [count] | Total posts: [count]
    - Engagement rate: [X]% (benchmark: 2–4%) — [ممتاز / ضمن / ضعيف / متدنٍّ جداً]
    - Posting frequency: [X] posts/week (benchmark: 4+/week) — [above / within / below]
@@ -67,7 +68,7 @@ Score based on:
    - Avg reel views: [X] (benchmark: 5K–50K for healthy Saudi café)
    - [2–3 sentence analysis: what content is working, what is missing, tone/style observations]
 
-3. **TikTok Account:** @[exact scraped uniqueId from tool output] | URL: https://www.tiktok.com/@[scraped_uniqueId]
+3. **TikTok Account:** @[tiktok.username from data] | URL: [use tiktok.profileUrl from data exactly as-is — do NOT construct it yourself]
    - Followers: [count] | Total likes: [count] | Videos: [count]
    - Engagement rate: [X]% (benchmark: 3–7%) — [ممتاز / ضمن / ضعيف / متدنٍّ جداً]
    - Posting frequency: [X] videos/week (benchmark: 3+/week) — [above / within / below]
@@ -82,7 +83,8 @@ Score based on:
    - Win 1: [Specific, immediately actionable improvement]
    - Win 2: [Specific, immediately actionable improvement]
 `,
-  model: 'openrouter/google/gemini-2.5-pro',
+  model: 'google/gemini-2.5-pro',
+  memory: new Memory(),
   tools: {
     socialMediaScraperTool,
   },

@@ -145,9 +145,11 @@ function computeInstagramMetrics(
     ...recentReels.map((r) => r.date),
   ]);
 
-  console.log(`[social-scraper] Instagram @${handle} — followers: ${followers || 'n/a'}`);
+  const igUsername = user.username ?? handle;
+  console.log(`[social-scraper] Instagram @${igUsername} — followers: ${followers || 'n/a'}`);
   return {
-    username:          user.username   ?? handle,
+    username:          igUsername,
+    profileUrl:        `https://www.instagram.com/${igUsername}/`,
     fullName:          user.full_name,
     bio:               user.biography,
     followers:         followers || undefined,
@@ -220,9 +222,22 @@ function computeTikTokMetrics(
 
   const postsPerWeek = computePostsPerWeek(recentVideos.map((v) => v.date));
 
-  console.log(`[social-scraper] TikTok @${handle} — followers: ${followers ?? 'n/a'}`);
+  // Extract the real handle from a video share_url — this survives cases where
+  // uniqueId doesn't match the URL (e.g. auto-generated "user676918178" handles)
+  const ttUsername = user.uniqueId ?? handle;
+  let ttProfileUrl = `https://www.tiktok.com/@${ttUsername}`;
+  for (const v of videos) {
+    const rawUrl = v.share_url ?? v.url;
+    if (rawUrl && typeof rawUrl === 'string') {
+      const m = rawUrl.match(/https?:\/\/(?:www\.)?tiktok\.com\/@([^/?&#]+)/);
+      if (m && m[1]) { ttProfileUrl = `https://www.tiktok.com/@${m[1]}`; break; }
+    }
+  }
+
+  console.log(`[social-scraper] TikTok @${ttUsername} — followers: ${followers ?? 'n/a'}`);
   return {
-    username:    user.uniqueId ?? handle,
+    username:    ttUsername,
+    profileUrl:  ttProfileUrl,
     displayName: user.nickname,
     bio:         user.signature,
     followers,
