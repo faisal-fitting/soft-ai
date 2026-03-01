@@ -44,5 +44,4 @@ Items (array, at least one):
 4. Never attempt to compute financial KPIs yourself. The tool handles all calculations.
 `,
   tools: { businessAnalysisTool },
-  memory: new Memory()
 });

@@ -54,6 +54,5 @@ When the user message starts with "COMPETITOR ANALYSIS MODE:", output only:
 Max 150 words. Reviews are provided in the prompt — do not attempt to fetch them.
 `,
   model: 'google/gemini-2.5-pro',
-  memory: new Memory(),
   tools: {},
 });

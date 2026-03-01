@@ -42,7 +42,13 @@ Determine your operating mode before doing anything else:
   ❌ $$\frac{\text{...}}{\text{...}}$$
 `,
   model: 'anthropic/claude-sonnet-4-6',
-  memory: new Memory(),
+  memory: new Memory({
+   options: {
+     workingMemory:{
+      enabled: true
+     }
+   },
+  }),
   tools: {
     getPlaceDetails,
     getNearbyPlaces,

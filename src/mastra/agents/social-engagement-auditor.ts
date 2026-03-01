@@ -84,7 +84,6 @@ Score based on:
    - Win 2: [Specific, immediately actionable improvement]
 `,
   model: 'google/gemini-2.5-pro',
-  memory: new Memory(),
   tools: {
     socialMediaScraperTool,
   },

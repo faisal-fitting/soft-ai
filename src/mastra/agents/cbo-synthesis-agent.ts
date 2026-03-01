@@ -710,7 +710,6 @@ Provide an action plan of 5 items: 3 immediate (loss reduction / closing the bre
 - No HTML tags of any kind in the output
 `,
   model: 'google/gemini-2.5-pro',
-  memory: new Memory(),
   tools: {
     getPlaceDetails,
     getNearbyPlaces,
