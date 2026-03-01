@@ -82,7 +82,7 @@ Score based on:
    - Win 1: [Specific, immediately actionable improvement]
    - Win 2: [Specific, immediately actionable improvement]
 `,
-  model: 'google/gemini-2.5-pro',
+  model: 'openrouter/google/gemini-2.5-pro',
   tools: {
     socialMediaScraperTool,
   },

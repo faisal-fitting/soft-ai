@@ -41,7 +41,7 @@ Determine your operating mode before doing anything else:
   ✅ معدل التفاعل = (إعجابات + تعليقات + مشاركات) ÷ متابعين × 100
   ❌ $$\frac{\text{...}}{\text{...}}$$
 `,
-  model: 'anthropic/claude-sonnet-4-6',
+  model: 'openrouter/anthropic/claude-sonnet-4.6',
   memory: new Memory({
    options: {
      workingMemory:{

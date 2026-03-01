@@ -709,7 +709,7 @@ Provide an action plan of 5 items: 3 immediate (loss reduction / closing the bre
 - All SAR amounts formatted with commas (e.g., "SAR 45,000")
 - No HTML tags of any kind in the output
 `,
-  model: 'google/gemini-2.5-pro',
+  model: 'openrouter/google/gemini-2.5-pro',
   tools: {
     getPlaceDetails,
     getNearbyPlaces,
