@@ -20,7 +20,14 @@
       "Bash(grep:*)",
       "Bash(node:*)",
       "Bash(cd /c/Users/noc-9/Documents/soft-ai && npx tsc --noEmit 2>&1)",
-      "WebFetch(domain:deepwiki.com)"
+      "WebFetch(domain:deepwiki.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(curl:*)",
+      "mcp__deepwiki__ask_question",
+      "Bash(npx tsc:*)",
+      "WebFetch(domain:ui.shadcn.com)",
+      "mcp__deepwiki__read_wiki_structure",
+      "Bash(npx shadcn@latest:*)"
     ]
   }
 }
