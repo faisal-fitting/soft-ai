@@ -8,7 +8,10 @@ import { cboAgent } from './agents/CBO-agent';
 import { cboSynthesisAgent } from './agents/cbo-synthesis-agent';
 import { semanticAnalysisAgent } from './agents/sematic-analysis';
 import { socialEngagementAuditor } from './agents/social-engagement-auditor';
+import { VercelDeployer } from '@mastra/deployer-vercel'
+
 export const mastra = new Mastra({
+  deployer: new VercelDeployer(),
   workflows: { businessAnalysisWorkflow },
   agents: { cboAgent, cboSynthesisAgent, semanticAnalysisAgent, socialEngagementAuditor, },
   storage: new LibSQLStore({
