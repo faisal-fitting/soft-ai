@@ -1,5 +1,4 @@
 import { Agent } from '@mastra/core/agent';
-import { Memory } from '@mastra/memory';
 
 export const semanticAnalysisAgent = new Agent({
   id: 'semantic-analysis-agent',

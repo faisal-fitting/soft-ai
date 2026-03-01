@@ -1,5 +1,4 @@
 import { Agent } from '@mastra/core/agent';
-import { Memory } from '@mastra/memory';
 import { socialMediaScraperTool } from '../tools/social-media-scrape';
 
 export const socialEngagementAuditor = new Agent({

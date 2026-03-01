@@ -1,6 +1,5 @@
 import { Agent } from '@mastra/core/agent';
 import { businessAnalysisTool } from '../tools/business-analysis-tool';
-import { Memory } from '@mastra/memory';
 
 export const orchestratorAgent = new Agent({
   id: 'orchestrator-agent',
