@@ -9,10 +9,9 @@ import { cboSynthesisAgent } from './agents/cbo-synthesis-agent';
 import { semanticAnalysisAgent } from './agents/sematic-analysis';
 import { socialEngagementAuditor } from './agents/social-engagement-auditor';
 import { orchestratorAgent } from './agents/orchestrator-agent';
-
 export const mastra = new Mastra({
   workflows: { businessAnalysisWorkflow },
-  agents: { cboAgent, cboSynthesisAgent, semanticAnalysisAgent, socialEngagementAuditor },
+  agents: { cboAgent, cboSynthesisAgent, semanticAnalysisAgent, socialEngagementAuditor,orchestratorAgent },
   storage: new LibSQLStore({
     id: "mastra-storage",
     // stores observability, scores, ... into persistent file storage
