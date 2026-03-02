@@ -289,18 +289,14 @@ export function BusinessForm({ onSubmit, isSubmitting }: Props) {
     govFees: 0,
     serviceLaborCosts: 0,
     otherCosts: 0,
-    items: [newItem(), newItem()],
+    items: [],
   });
 
-  // Track collapsed state per item (false = expanded)
-  const [collapsed, setCollapsed] = useState<boolean[]>(() =>
-    Array(2).fill(false)
-  );
+  // Track collapsed state per item (true = collapsed)
+  const [collapsed, setCollapsed] = useState<boolean[]>([]);
 
   // Track cost mode per item ("detailed" | "total")
-  const [costModes, setCostModes] = useState<Array<"detailed" | "total">>(() =>
-    Array(2).fill("detailed")
-  );
+  const [costModes, setCostModes] = useState<Array<"detailed" | "total">>([]);
 
   // File input ref for Excel import
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -319,7 +315,7 @@ export function BusinessForm({ onSubmit, isSubmitting }: Props) {
 
   const addItem = () => {
     setData((d) => ({ ...d, items: [...d.items, newItem()] }));
-    setCollapsed((c) => [...c, false]);
+    setCollapsed((c) => [...c, false]); // new item starts expanded so user can fill it in
     setCostModes((m) => [...m, "detailed"]);
   };
 
@@ -374,7 +370,7 @@ export function BusinessForm({ onSubmit, isSubmitting }: Props) {
     if (!imported.length) return;
 
     setData((d) => ({ ...d, items: [...d.items, ...imported] }));
-    setCollapsed((c) => [...c, ...Array(imported.length).fill(false)]);
+    setCollapsed((c) => [...c, ...Array(imported.length).fill(true)]);
     setCostModes((m) => [...m, ...importedModes]);
     e.target.value = "";
   };
