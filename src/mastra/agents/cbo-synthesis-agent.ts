@@ -92,17 +92,17 @@ Use the businessName from the input EXACTLY as written — never translate, corr
 2. Review pre-fetched placeDetails, reviews, nearbyCompetitors, socialData from context
 3. If competitor list has fewer than 5, call getNearbyPlaces with lat/lon from placeDetails and a wider radius
 4. For Competitor SWOT: use the pre-fetched competitor reviews provided in the prompt context
-5. Use webSearchTool (max 2 searches) for Saudi F&B benchmarks or 2025 trends when needed
+5. Use webSearchTool (max 2 searches) for Saudi F&B benchmarks or 2026 trends when needed
 
 **Web Search Scope Constraint:**
 Use webSearchTool ONLY for:
 1. Saudi F&B market size, growth rate, and revenue benchmarks (mandatory)
 2. Saudi F&B profit margin benchmarks — gross margin, net margin, fixed cost ratios (mandatory)
 3. Competitor news (new branches, closures, promotions) — if needed
-4. Saudi F&B consumer trends 2025 — if needed
+4. Saudi F&B consumer trends 2026 — if needed
 Maximum 2 searches per report — both searches are mandatory for the Benchmarks section:
-- Search 1 (mandatory): Saudi Arabia café/coffee shop market size, revenue, growth rate 2025
-- Search 2 (mandatory): Saudi Arabia F&B profit margin, ticket size, capacity utilization benchmarks 2025
+- Search 1 (mandatory): Saudi Arabia café/coffee shop market size, revenue, growth rate 2026
+- Search 2 (mandatory): Saudi Arabia F&B profit margin, ticket size, capacity utilization benchmarks 2026
 Cite the exact source title in the report for every search used.
 Never cite unverified blogs — only news outlets, government sites (GASTAT, وزارة التجارة), or industry bodies (Euromonitor, NielsenIQ, Vision 2030 reports).
 FORBIDDEN sources: personal blogs, getchee.com, stellarmr.com, or any non-institutional site.
@@ -422,8 +422,8 @@ Wrong (causes 5-cell row — forbidden):
 ### الجزء الثاني — معايير السوق السعودي
 
 Use webSearchTool for up to 2 searches:
-- Search 1 (mandatory): "Saudi Arabia café coffee shop market size revenue benchmark 2025" — looking for: market size in SAR/USD, growth rate YoY, number of coffee shops in Riyadh, average revenue per outlet, average ticket size.
-- Search 2 (mandatory): "Saudi Arabia F&B restaurant profit margin benchmark 2025" — looking for: gross margin, net margin, fixed cost ratios, capacity utilization benchmarks.
+- Search 1 (mandatory): "Saudi Arabia café coffee shop market size revenue benchmark 2026" — looking for: market size in SAR/USD, growth rate YoY, number of coffee shops in Riyadh, average revenue per outlet, average ticket size.
+- Search 2 (mandatory): "Saudi Arabia F&B restaurant profit margin benchmark 2026" — looking for: gross margin, net margin, fixed cost ratios, capacity utilization benchmarks.
 
 Prioritize sources: وزارة التجارة، GASTAT، Euromonitor، NielsenIQ MENA، Vision 2030 F&B reports. If no specific numbers are found, use stored industry estimates and state explicitly: "تقديرات صناعية مخزنة — لا مصدر محقق متاح."
 

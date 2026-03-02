@@ -2,7 +2,17 @@
 
 import { useEffect, useRef, useState } from "react";
 import { motion } from "motion/react";
-import { PlusIcon, Trash2Icon, ArrowRight, Loader2 } from "lucide-react";
+import {
+  PlusIcon,
+  Trash2Icon,
+  Loader2,
+  ArrowLeft,
+  ChevronDown,
+  Upload,
+  Layers2,
+  Combine,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -14,6 +24,11 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import {
   Combobox,
   ComboboxContent,
@@ -31,7 +46,7 @@ export interface MenuItemInput {
   soldUnits: number;
   rawMaterialCostPerUnit: number;
   packagingCostPerUnit: number;
-  dailyProductionCapacity: number;
+  dailyProductionCapacity?: number;
 }
 
 export interface FinancialFormData {
@@ -207,7 +222,7 @@ function PlaceAutocomplete({
         filter={null}
       >
         <ComboboxInput placeholder="ابحث باسم كافيهك أو مطعمك..." showClear />
-        <ComboboxContent>
+        <ComboboxContent dir="rtl">
           <ComboboxEmpty>
             {loading ? <Loader2 className="size-4 animate-spin" /> : query ? "لا توجد نتائج" : "اكتب اسم كافيهك للبحث"}
           </ComboboxEmpty>
@@ -243,7 +258,7 @@ const newItem = (): MenuItemInput => ({
   soldUnits: 0,
   rawMaterialCostPerUnit: 0,
   packagingCostPerUnit: 0,
-  dailyProductionCapacity: 0,
+  dailyProductionCapacity: undefined,
 });
 
 // ── Main Component ────────────────────────────────────────────────────────────
@@ -277,21 +292,92 @@ export function BusinessForm({ onSubmit, isSubmitting }: Props) {
     items: [newItem(), newItem()],
   });
 
+  // Track collapsed state per item (false = expanded)
+  const [collapsed, setCollapsed] = useState<boolean[]>(() =>
+    Array(2).fill(false)
+  );
+
+  // Track cost mode per item ("detailed" | "total")
+  const [costModes, setCostModes] = useState<Array<"detailed" | "total">>(() =>
+    Array(2).fill("detailed")
+  );
+
+  // File input ref for Excel import
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const set = <K extends keyof FinancialFormData>(
     key: K,
     value: FinancialFormData[K]
   ) => setData((d) => ({ ...d, [key]: value }));
 
-  const setItem = (index: number, key: keyof MenuItemInput, value: string | number) =>
+  const setItem = (index: number, key: keyof MenuItemInput, value: string | number | undefined) =>
     setData((d) => {
       const items = [...d.items];
       items[index] = { ...items[index], [key]: value };
       return { ...d, items };
     });
 
-  const addItem = () => setData((d) => ({ ...d, items: [...d.items, newItem()] }));
-  const removeItem = (i: number) =>
+  const addItem = () => {
+    setData((d) => ({ ...d, items: [...d.items, newItem()] }));
+    setCollapsed((c) => [...c, false]);
+    setCostModes((m) => [...m, "detailed"]);
+  };
+
+  const removeItem = (i: number) => {
     setData((d) => ({ ...d, items: d.items.filter((_, idx) => idx !== i) }));
+    setCollapsed((c) => c.filter((_, idx) => idx !== i));
+    setCostModes((m) => m.filter((_, idx) => idx !== i));
+  };
+
+  const handleExcelImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const buffer = await file.arrayBuffer();
+    const { read, utils } = await import("xlsx");
+    const wb = read(buffer, { type: "array" });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const rows = utils.sheet_to_json<Record<string, unknown>>(ws);
+
+    const COLUMNS: Record<string, keyof MenuItemInput> = {
+      "اسم المنتج":             "name",
+      "سعر البيع":              "sellingPrice",
+      "وحدات مباعة شهرياً":    "soldUnits",
+      "تكلفة مواد خام":         "rawMaterialCostPerUnit",
+      "تكلفة تغليف":            "packagingCostPerUnit",
+      "طاقة إنتاجية يومية":    "dailyProductionCapacity",
+    };
+
+    const imported: MenuItemInput[] = rows.map((row) => {
+      const item = newItem();
+      for (const [col, field] of Object.entries(COLUMNS)) {
+        if (row[col] !== undefined) {
+          (item as unknown as Record<string, unknown>)[field] =
+            field === "name" ? String(row[col]) : Number(row[col]) || 0;
+        }
+      }
+      // "إجمالي التكلفة" overrides raw material cost and signals total mode
+      if (row["إجمالي التكلفة"] !== undefined) {
+        item.rawMaterialCostPerUnit = Number(row["إجمالي التكلفة"]) || 0;
+        item.packagingCostPerUnit = 0;
+      }
+      return item;
+    }).filter((it) => it.name.trim());
+
+    // Items imported with a total cost column use "total" mode
+    const importedModes = rows
+      .filter((row) => {
+        const name = String(row["اسم المنتج"] ?? "").trim();
+        return name.length > 0;
+      })
+      .map((row) => (row["إجمالي التكلفة"] !== undefined ? "total" : "detailed") as "total" | "detailed");
+
+    if (!imported.length) return;
+
+    setData((d) => ({ ...d, items: [...d.items, ...imported] }));
+    setCollapsed((c) => [...c, ...Array(imported.length).fill(false)]);
+    setCostModes((m) => [...m, ...importedModes]);
+    e.target.value = "";
+  };
 
   const canSubmit =
     data.businessName.trim() &&
@@ -383,22 +469,18 @@ export function BusinessForm({ onSubmit, isSubmitting }: Props) {
           <div className="grid grid-cols-2 gap-4">
             <Field label="Instagram">
               <div className="flex items-center gap-1">
-                <span className="text-sm text-muted-foreground">@</span>
                 <Input
                   value={data.instagramUser}
                   onChange={(e) => set("instagramUser", e.target.value)}
-                  placeholder="handle"
                   dir="ltr"
                 />
               </div>
             </Field>
             <Field label="TikTok">
               <div className="flex items-center gap-1">
-                <span className="text-sm text-muted-foreground">@</span>
                 <Input
                   value={data.tiktokUser}
                   onChange={(e) => set("tiktokUser", e.target.value)}
-                  placeholder="handle"
                   dir="ltr"
                 />
               </div>
@@ -407,8 +489,8 @@ export function BusinessForm({ onSubmit, isSubmitting }: Props) {
 
           <div className="flex justify-end pt-2">
             <Button size="sm" variant="outline" onClick={() => setTab("finance")}>
-              التالي: البيانات المالية
-              <ArrowRight className="ml-1.5 size-3.5" />
+              التالي
+              <ArrowLeft className="size-3.5" />
             </Button>
           </div>
         </TabsContent>
@@ -482,7 +564,7 @@ export function BusinessForm({ onSubmit, isSubmitting }: Props) {
           <div className="flex justify-end pt-2">
             <Button size="sm" variant="outline" onClick={() => setTab("items")}>
               التالي: المنتجات
-              <ArrowRight className="ml-1.5 size-3.5" />
+              <ArrowLeft className="ml-1.5 size-3.5" />
             </Button>
           </div>
         </TabsContent>
@@ -498,77 +580,160 @@ export function BusinessForm({ onSubmit, isSubmitting }: Props) {
               transition={{ duration: 0.2 }}
               className="rounded-lg border bg-card p-4"
             >
-              <div className="mb-3 flex items-center justify-between">
-                <span className="text-sm font-medium text-muted-foreground">
-                  منتج {i + 1}
-                </span>
-                {data.items.length > 1 && (
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    className="size-7 text-destructive hover:text-destructive"
-                    onClick={() => removeItem(i)}
-                  >
-                    <Trash2Icon className="size-3.5" />
-                  </Button>
-                )}
-              </div>
+              <Collapsible
+                open={!collapsed[i]}
+                onOpenChange={(open) =>
+                  setCollapsed((c) => { const n = [...c]; n[i] = !open; return n; })
+                }
+              >
+                {/* Card header — always visible */}
+                <div className="flex items-center justify-between">
+                  <CollapsibleTrigger asChild>
+                    <button className="flex flex-1 items-center gap-2 text-right">
+                      <ChevronDown
+                        className={cn(
+                          "size-3.5 transition-transform text-muted-foreground",
+                          collapsed[i] && "-rotate-90"
+                        )}
+                      />
+                      <span className="text-sm font-medium">
+                        {item.name.trim() || `منتج ${i + 1}`}
+                      </span>
+                    </button>
+                  </CollapsibleTrigger>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div className="col-span-2">
-                  <Field label="اسم المنتج">
-                    <Input
-                      value={item.name}
-                      onChange={(e) => setItem(i, "name", e.target.value)}
-                      placeholder="مثال: كابتشينو"
-                    />
-                  </Field>
+                  <div className="flex items-center gap-1">
+                    {/* Cost mode toggle */}
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      className="size-6"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setCostModes((m) => {
+                          const n = [...m];
+                          n[i] = m[i] === "detailed" ? "total" : "detailed";
+                          return n;
+                        });
+                      }}
+                      title={
+                        costModes[i] === "detailed"
+                          ? "التبديل لإجمالي التكلفة"
+                          : "التبديل لتفاصيل التكلفة"
+                      }
+                    >
+                      {costModes[i] === "detailed" ? (
+                        <Layers2 className="size-3" />
+                      ) : (
+                        <Combine className="size-3" />
+                      )}
+                    </Button>
+
+                    {/* Delete button */}
+                    {data.items.length > 1 && (
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        className="size-7 text-destructive hover:text-destructive"
+                        onClick={() => removeItem(i)}
+                      >
+                        <Trash2Icon className="size-3.5" />
+                      </Button>
+                    )}
+                  </div>
                 </div>
-                <Field label="سعر البيع (SAR)">
-                  <NumericInput
-                    value={item.sellingPrice}
-                    onChange={(v) => setItem(i, "sellingPrice", v)}
-                  />
-                </Field>
-                <Field label="الوحدات المباعة شهرياً">
-                  <NumericInput
-                    value={item.soldUnits}
-                    onChange={(v) => setItem(i, "soldUnits", v)}
-                  />
-                </Field>
-                <Field label="تكلفة المواد الخام/وحدة">
-                  <NumericInput
-                    value={item.rawMaterialCostPerUnit}
-                    onChange={(v) => setItem(i, "rawMaterialCostPerUnit", v)}
-                  />
-                </Field>
-                <Field label="تكلفة التغليف/وحدة">
-                  <NumericInput
-                    value={item.packagingCostPerUnit}
-                    onChange={(v) => setItem(i, "packagingCostPerUnit", v)}
-                  />
-                </Field>
-                <div className="col-span-2">
-                  <Field label="الطاقة الإنتاجية اليومية (وحدة/يوم)">
-                    <NumericInput
-                      value={item.dailyProductionCapacity}
-                      onChange={(v) => setItem(i, "dailyProductionCapacity", v)}
-                    />
-                  </Field>
-                </div>
-              </div>
+
+                {/* Collapsible fields */}
+                <CollapsibleContent>
+                  <div className="mt-3 grid grid-cols-2 gap-3">
+                    <div className="col-span-2">
+                      <Field label="اسم المنتج">
+                        <Input
+                          value={item.name}
+                          onChange={(e) => setItem(i, "name", e.target.value)}
+                          placeholder="مثال: كابتشينو"
+                        />
+                      </Field>
+                    </div>
+                    <Field label="سعر البيع (SAR)">
+                      <NumericInput
+                        value={item.sellingPrice}
+                        onChange={(v) => setItem(i, "sellingPrice", v)}
+                      />
+                    </Field>
+                    <Field label="الوحدات المباعة شهرياً">
+                      <NumericInput
+                        value={item.soldUnits}
+                        onChange={(v) => setItem(i, "soldUnits", v)}
+                      />
+                    </Field>
+
+                    {costModes[i] === "total" ? (
+                      <Field label="إجمالي تكلفة الوحدة (SAR)">
+                        <NumericInput
+                          value={item.rawMaterialCostPerUnit}
+                          onChange={(v) => setItem(i, "rawMaterialCostPerUnit", v)}
+                        />
+                      </Field>
+                    ) : (
+                      <>
+                        <Field label="تكلفة المواد الخام/وحدة">
+                          <NumericInput
+                            value={item.rawMaterialCostPerUnit}
+                            onChange={(v) => setItem(i, "rawMaterialCostPerUnit", v)}
+                          />
+                        </Field>
+                        <Field label="تكلفة التغليف/وحدة">
+                          <NumericInput
+                            value={item.packagingCostPerUnit}
+                            onChange={(v) => setItem(i, "packagingCostPerUnit", v)}
+                          />
+                        </Field>
+                      </>
+                    )}
+
+                    <div className={cn("col-span-2", costModes[i] === "total" && "col-span-1")}>
+                      <Field label="الطاقة الإنتاجية اليومية (وحدة/يوم)">
+                        <NumericInput
+                          value={item.dailyProductionCapacity ?? 0}
+                          onChange={(v) => setItem(i, "dailyProductionCapacity", v || undefined)}
+                        />
+                      </Field>
+                    </div>
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
             </motion.div>
           ))}
 
-          <Button
-            variant="outline"
-            size="sm"
-            className="w-full gap-1.5 border-dashed text-xs"
-            onClick={addItem}
-          >
-            <PlusIcon className="size-3.5" />
-            إضافة منتج
-          </Button>
+          {/* Toolbar: Add + Import */}
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="flex-1 gap-1.5 border-dashed text-xs"
+              onClick={addItem}
+            >
+              <PlusIcon className="size-3.5" />
+              إضافة منتج
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5 text-xs"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <Upload className="size-3.5" />
+              استيراد من Excel
+            </Button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".xlsx,.xls,.csv"
+              className="hidden"
+              onChange={handleExcelImport}
+            />
+          </div>
 
           {/* Submit */}
           <div className="pt-2">
@@ -579,11 +744,6 @@ export function BusinessForm({ onSubmit, isSubmitting }: Props) {
             >
               {isSubmitting ? "جارٍ إنشاء التقرير..." : "إنشاء التقرير الشامل"}
             </Button>
-            {!canSubmit && (
-              <p className="mt-2 text-center text-xs text-muted-foreground">
-                أدخل اسم المشروع، معرّف Google Place، وأسماء المنتجات
-              </p>
-            )}
           </div>
         </TabsContent>
       </Tabs>

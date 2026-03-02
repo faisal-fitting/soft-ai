@@ -15,11 +15,19 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { cjk } from "@streamdown/cjk";
 import { code } from "@streamdown/code";
 import { math } from "@streamdown/math";
 import { mermaid } from "@streamdown/mermaid";
-import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
+import { ChevronLeftIcon, ChevronRightIcon, ExternalLink } from "lucide-react";
 import {
   createContext,
   memo,
@@ -327,6 +335,42 @@ const streamdownPlugins = { cjk, code, math, mermaid };
 const preprocessReport = (text: string): string =>
   text.replace(/<!--[\s\S]*?-->/g, "");
 
+const linkSafetyConfig = {
+  enabled: true,
+  renderModal: ({
+    isOpen,
+    onClose,
+    onConfirm,
+    url,
+  }: {
+    isOpen: boolean;
+    onClose: () => void;
+    onConfirm: () => void;
+    url: string;
+  }) => (
+    <Dialog open={isOpen} onOpenChange={onClose} >
+      <DialogContent className="pt-10" dir="rtl">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-base text-center">
+            فتح رابط خارجي
+          </DialogTitle>
+          <DialogDescription className="mt-2 break-all " dir="ltr">
+            {url}
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter className="flex-row-reverse gap-2 sm:justify-start">
+          <Button size="sm" onClick={onConfirm}>
+            فتح الرابط
+          </Button>
+          <Button size="sm" variant="ghost" onClick={onClose}>
+            إلغاء
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  ),
+};
+
 export const MessageResponse = memo(
   ({ className, children, ...props }: MessageResponseProps) => {
     const processedChildren =
@@ -338,6 +382,7 @@ export const MessageResponse = memo(
           className
         )}
         plugins={streamdownPlugins}
+        linkSafety={linkSafetyConfig}
         {...props}
       >
         {processedChildren}

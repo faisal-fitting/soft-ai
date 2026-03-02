@@ -13,7 +13,7 @@ export const webSearchTool = createTool({
     'Use ONLY for: ' +
     '1. Saudi F&B market benchmarks (margins, ticket sizes by city). ' +
     '2. Competitor news (new branches, closures, promotions). ' +
-    '3. Saudi F&B consumer trends 2025. ' +
+    '3. Saudi F&B consumer trends 2026. ' +
     '4. Saudi regulatory context (VAT, municipal licensing). ' +
     'Maximum 2 searches per report. Cite the source title in the report. ' +
     'Never cite unverified blogs — only news outlets, government sites, or industry bodies.',

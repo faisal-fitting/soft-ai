@@ -14,7 +14,7 @@ export const mastra = new Mastra({
   agents: { cboAgent, cboSynthesisAgent, semanticAnalysisAgent, socialEngagementAuditor, },
   storage: new LibSQLStore({
     id: "mastra-storage",
-     url: "libsql://cob-ai-faisal-a.aws-ap-south-1.turso.io",
+    url: "libsql://cob-ai-faisal-a.aws-ap-south-1.turso.io",
     authToken: process.env.LIBSQL_AUTH_TOKEN || "",
   }),
   logger: new PinoLogger({

@@ -7,7 +7,7 @@ import type { ToolUIPart, DynamicToolUIPart } from "ai";
 import { motion, AnimatePresence } from "motion/react";
 import { Loader2 } from "lucide-react";
 
-import { getThreadMessages } from "@/app/actions";
+import { getThreadMessages, saveThreadTitle } from "@/app/actions";
 import { WorkflowSidebar } from "@/components/workflow-sidebar";
 import {
   BusinessForm,
@@ -188,7 +188,7 @@ function ChatPanel({
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.25 }}
               >
-                <Message from={msg.role}>
+                <Message from={msg.role} dir="rtl">
                   {/* Tool calls (assistant only) */}
                   {msg.role === "assistant" &&
                     msg.parts
@@ -227,7 +227,7 @@ function ChatPanel({
                       })}
 
                   {/* Text content */}
-                  <MessageContent dir="rtl">
+                  <MessageContent>
                     {msg.role === "assistant" ? (
                       <MessageResponse>{getTextFromParts(msg)}</MessageResponse>
                     ) : (
@@ -380,9 +380,10 @@ function ReportSession({
     async (data: FinancialFormData) => {
       setBusinessName(data.businessName);
       setPhase("chat");
+      saveThreadTitle(threadId, data.businessName).catch(console.error);
       await sendMessage({ text: buildReportPrompt(data) });
     },
-    [sendMessage]
+    [sendMessage, threadId]
   );
 
   const handleSend = useCallback(
@@ -451,12 +452,23 @@ export default function Home() {
     setSessionKey((k) => k + 1);
   }, []);
 
+  const handleSelectThread = useCallback((id: string) => {
+    localStorage.setItem("cbo-thread-id", id);
+    localStorage.setItem("cbo-phase", "chat");
+    localStorage.removeItem("cbo-business-name");
+    setIsGenerating(false);
+    setHasReport(false);
+    setSessionKey((k) => k + 1);
+  }, []);
+
   return (
     <div className="flex h-screen overflow-hidden bg-background">
       <WorkflowSidebar
         isGenerating={isGenerating}
         hasReport={hasReport}
         onNewReport={handleNewReport}
+        onSelectThread={handleSelectThread}
+        sessionKey={sessionKey}
       />
 
       <main className="relative flex flex-1 overflow-hidden">

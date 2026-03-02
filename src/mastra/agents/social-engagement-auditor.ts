@@ -30,7 +30,7 @@ Evaluate the brand's "Digital Footprint" and determine if social media effort is
    - Ratio of promotional vs. organic content
    - **Format split:** compare the count of 'recentPosts' (static) vs 'recentReels' to assess whether the brand is investing in video. Flag if reels are absent or under-represented.
 
-3. **Platform-Specific Benchmarks (Saudi F&B 2024–2025):**
+3. **Platform-Specific Benchmarks (Saudi F&B 2024–2026):**
    - Instagram: Healthy engagement = 2–4% | Micro influencer tier = 10K–50K followers | Average café = 5K–30K
    - Instagram 'avgViews' reflects accurate reel view counts from a dedicated endpoint — treat it as reliable.
    - TikTok: Healthy engagement = 3–7% | Views per video for healthy account = 5K–50K
