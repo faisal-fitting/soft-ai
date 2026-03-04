@@ -328,77 +328,36 @@ const analyzeCompetitorReviews = createStep({
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-// STEP — Generate Final Report (CBO Agent)
+// Helper — Build shared prompt data fragments
 // ────────────────────────────────────────────────────────────────────────────
-const generateReport = createStep({
-  id: 'generate-report',
-  description: 'CBO agent synthesizes all data into a comprehensive business health report',
-  inputSchema: reportInputSchema,
-  outputSchema: z.object({
-    report: z.string(),
-  }),
-  execute: async ({ inputData, mastra }) => {
-    if (!inputData) throw new Error('Input data missing');
+function buildFinancialKPIsBlock(d: z.infer<typeof reportInputSchema>) {
+  const perProductTable = d.items.map((i) =>
+    `| ${i.name} | ${i.sellingPrice.toFixed(2)} | ${i.variableCostPerUnit.toFixed(2)} | ${i.contributionMarginPerUnit.toFixed(2)} | ${i.breakEvenUnits >= Number.MAX_SAFE_INTEGER ? '∞' : i.breakEvenUnits.toFixed(0)} | ${i.soldUnits} | ${i.capacityUtilizationPercent.toFixed(1)}% | ${i.menuCategory} | ${i.isBelowCost ? 'LOSS' : 'OK'} |`,
+  ).join('\n');
 
-    const {
-      businessName, businessType, placeId,
-      instagramUser, tiktokUser,
-      netRevenue, variableCosts, fixedCosts, totalCosts,
-      grossProfit, netProfit, grossMargin, netMargin,
-      contributionMarginRatio, breakEvenRevenue, breakEvenGap, isAboveBreakEven,
-      rawMaterials, packaging,
-      items,
-      placeDetails, nearbyCompetitors,
-      sentimentAnalysis, socialAudit,
-      competitorAnalyses,
-    } = inputData;
+  const belowCostItems = d.items.filter((i) => i.isBelowCost);
+  const priceWarnings = belowCostItems.length > 0
+    ? belowCostItems.map((i) =>
+        `> ⚠️ **${i.name} يُباع بخسارة!** سعر البيع (${i.sellingPrice.toFixed(2)} SAR) أقل من تكلفة الوحدة (${i.variableCostPerUnit.toFixed(2)} SAR) — خسارة ${i.lossPerUnit.toFixed(2)} SAR لكل وحدة.`,
+      ).join('\n')
+    : 'لا توجد منتجات تُباع بخسارة.';
 
-    const synthesisAgent = mastra?.getAgent('cboSynthesisAgent');
-    if (!synthesisAgent) throw new Error('CBO Synthesis agent not found');
+  const marginRanking = [...d.items]
+    .sort((a, b) => a.marginRank - b.marginRank)
+    .map((i, idx) => `${idx + 1}. ${i.name}: هامش المساهمة ${i.contributionMarginPerUnit.toFixed(2)} SAR (ترتيب الإيراد: #${i.revenueRank})`)
+    .join('\n');
 
-    // Build per-product breakeven table
-    const perProductTable = items.map((i) =>
-      `| ${i.name} | ${i.sellingPrice.toFixed(2)} | ${i.variableCostPerUnit.toFixed(2)} | ${i.contributionMarginPerUnit.toFixed(2)} | ${i.breakEvenUnits >= Number.MAX_SAFE_INTEGER ? '∞' : i.breakEvenUnits.toFixed(0)} | ${i.soldUnits} | ${i.capacityUtilizationPercent.toFixed(1)}% | ${i.menuCategory} | ${i.isBelowCost ? 'LOSS' : 'OK'} |`,
-    ).join('\n');
-
-    // Build price floor warnings
-    const belowCostItems = items.filter((i) => i.isBelowCost);
-    const priceWarnings = belowCostItems.length > 0
-      ? belowCostItems.map((i) =>
-          `> ⚠️ **${i.name} يُباع بخسارة!** سعر البيع (${i.sellingPrice.toFixed(2)} SAR) أقل من تكلفة الوحدة (${i.variableCostPerUnit.toFixed(2)} SAR) — خسارة ${i.lossPerUnit.toFixed(2)} SAR لكل وحدة.`,
-        ).join('\n')
-      : 'لا توجد منتجات تُباع بخسارة.';
-
-    // Build margin ranking
-    const marginRanking = [...items]
-      .sort((a, b) => a.marginRank - b.marginRank)
-      .map((i, idx) => `${idx + 1}. ${i.name}: هامش المساهمة ${i.contributionMarginPerUnit.toFixed(2)} SAR (ترتيب الإيراد: #${i.revenueRank})`)
-      .join('\n');
-
-    // Build competitor analysis section
-    const competitorAnalysisSection = competitorAnalyses.length > 0
-      ? competitorAnalyses.map((c) =>
-          `### Competitor: ${c.place_id}\n${c.analysis}`,
-        ).join('\n\n')
-      : 'No competitor analysis available.';
-
-    const prompt = `
-Generate a comprehensive F&B Business Intelligence Report for **${businessName}** (${businessType}).
-
-## SOCIAL HANDLES (use these for the §0 business card)
-- Instagram: ${instagramUser ? '@' + instagramUser : 'Not provided'}
-- TikTok: ${tiktokUser ? '@' + tiktokUser : 'Not provided'}
-
+  return `
 ## FINANCIAL KPIs (DO NOT RECALCULATE — treat as absolute facts)
-- Net Revenue: ${netRevenue.toFixed(2)} SAR
-- Variable Costs: ${variableCosts.toFixed(2)} SAR (Raw Materials: ${rawMaterials.toFixed(2)} SAR + Packaging: ${packaging.toFixed(2)} SAR + Production Staff: ${(variableCosts - rawMaterials - packaging).toFixed(2)} SAR)
-- Fixed Costs: ${fixedCosts.toFixed(2)} SAR
-- Total Costs: ${totalCosts.toFixed(2)} SAR
-- Gross Profit: ${grossProfit.toFixed(2)} SAR | Gross Margin: ${grossMargin.toFixed(2)}%
-- Net Profit: ${netProfit.toFixed(2)} SAR | Net Margin: ${netMargin.toFixed(2)}%
-- Contribution Margin Ratio: ${(contributionMarginRatio * 100).toFixed(2)}%
-- Break-Even Revenue: ${breakEvenRevenue.toFixed(2)} SAR
-- Break-Even Gap: ${breakEvenGap.toFixed(2)} SAR (${isAboveBreakEven ? 'ABOVE break-even ✓' : 'BELOW break-even ✗'})
+- Net Revenue: ${d.netRevenue.toFixed(2)} SAR
+- Variable Costs: ${d.variableCosts.toFixed(2)} SAR (Raw Materials: ${d.rawMaterials.toFixed(2)} SAR + Packaging: ${d.packaging.toFixed(2)} SAR + Production Staff: ${(d.variableCosts - d.rawMaterials - d.packaging).toFixed(2)} SAR)
+- Fixed Costs: ${d.fixedCosts.toFixed(2)} SAR
+- Total Costs: ${d.totalCosts.toFixed(2)} SAR
+- Gross Profit: ${d.grossProfit.toFixed(2)} SAR | Gross Margin: ${d.grossMargin.toFixed(2)}%
+- Net Profit: ${d.netProfit.toFixed(2)} SAR | Net Margin: ${d.netMargin.toFixed(2)}%
+- Contribution Margin Ratio: ${(d.contributionMarginRatio * 100).toFixed(2)}%
+- Break-Even Revenue: ${d.breakEvenRevenue.toFixed(2)} SAR
+- Break-Even Gap: ${d.breakEvenGap.toFixed(2)} SAR (${d.isAboveBreakEven ? 'ABOVE break-even ✓' : 'BELOW break-even ✗'})
 
 ## PER-PRODUCT BREAKEVEN ANALYSIS
 | Product | Selling Price | Variable Cost/Unit | Contribution Margin | Break-Even Units | Sold | Capacity Util. | Category | Status |
@@ -409,50 +368,254 @@ ${perProductTable}
 ${priceWarnings}
 
 ### Margin Ranking (by Contribution Margin)
-${marginRanking}
+${marginRanking}`;
+}
 
-## GOOGLE PLACE DATA (place_id: ${placeId})
-${JSON.stringify(placeDetails)}
+// ────────────────────────────────────────────────────────────────────────────
+// Schemas for parallel section writers
+// ────────────────────────────────────────────────────────────────────────────
+const financialSectionSchema = z.object({
+  sectionMarkdown: z.string().describe('Complete <!-- SECTION: financials --> content'),
+});
+
+const digitalPresenceSectionSchema = z.object({
+  sectionMarkdown: z.string().describe('Complete <!-- SECTION: digital-presence --> content'),
+});
+
+const benchmarkSectionSchema = z.object({
+  sectionMarkdown: z.string().describe('Complete <!-- SECTION: benchmarks --> content'),
+});
+
+const composerOutputSchema = z.object({
+  report: z.string().describe('Full report with all 7 sections assembled in order with markers'),
+});
+
+// Structured data forwarded alongside the report for the frontend UI
+const workflowOutputSchema = z.object({
+  report: z.string(),
+  data: reportInputSchema,
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// STEP — Write Financial Section (parallel)
+// ────────────────────────────────────────────────────────────────────────────
+const writeFinancials = createStep({
+  id: 'write-financials',
+  description: 'Financial writer agent generates the financials section',
+  inputSchema: reportInputSchema,
+  outputSchema: z.object({ financialsSection: z.string() }),
+  execute: async ({ inputData, mastra }) => {
+    console.log(`[write-financials] ENTERED`);
+    const agent = mastra?.getAgent('financialWriterAgent');
+    if (!agent) throw new Error('financialWriterAgent not found');
+
+    const prompt = `
+Write the **financials** section (Section 2 + Section 2.5) for **${inputData.businessName}** (${inputData.businessType}).
+
+${buildFinancialKPIsBlock(inputData)}
+
+**MANDATORY: Write the entire section in Arabic. Follow your instructions exactly.**
+`;
+
+    const response = await agent.generate([{ role: 'user', content: prompt }], {
+      structuredOutput: { schema: financialSectionSchema },
+    });
+    const raw = (response as any).object?.sectionMarkdown ?? response.text ?? '';
+    // Safety net: replace any <br> tags the model may have used in table cells with Arabic comma
+    const result = raw.replace(/<br\s*\/?>/gi, '، ');
+    console.log('[write-financials] Done, length:', result.length);
+    return { financialsSection: result };
+  },
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// STEP — Write Digital Presence Section (parallel)
+// ────────────────────────────────────────────────────────────────────────────
+const writeDigitalPresence = createStep({
+  id: 'write-digital-presence',
+  description: 'Digital presence writer agent generates the digital-presence section',
+  inputSchema: reportInputSchema,
+  outputSchema: z.object({ digitalPresenceSection: z.string() }),
+  execute: async ({ inputData, mastra }) => {
+    console.log(`[write-digital-presence] ENTERED`);
+    const agent = mastra?.getAgent('digitalPresenceWriterAgent');
+    if (!agent) throw new Error('digitalPresenceWriterAgent not found');
+
+    const prompt = `
+Write the **digital-presence** section (Section 4 + Section 5) for **${inputData.businessName}** (${inputData.businessType}).
+
+## SOCIAL HANDLES
+- Instagram: ${inputData.instagramUser ? '@' + inputData.instagramUser : 'Not provided'}
+- TikTok: ${inputData.tiktokUser ? '@' + inputData.tiktokUser : 'Not provided'}
+
+## GOOGLE PLACE DATA (place_id: ${inputData.placeId})
+${JSON.stringify(inputData.placeDetails)}
+
+## COMPETITOR LANDSCAPE (nearby businesses — for rating comparison)
+${JSON.stringify(inputData.nearbyCompetitors)}
+
+## REVIEW SENTIMENT ANALYSIS
+${inputData.sentimentAnalysis}
+
+## SOCIAL MEDIA AUDIT
+${inputData.socialAudit}
+
+**MANDATORY: Write the entire section in Arabic. Follow your instructions exactly.**
+`;
+
+    const response = await agent.generate([{ role: 'user', content: prompt }], {
+      structuredOutput: { schema: digitalPresenceSectionSchema },
+    });
+    const result = (response as any).object?.sectionMarkdown ?? response.text ?? '';
+    const finishReason = (response as any).finishReason ?? 'unknown';
+    console.log(`[write-digital-presence] Done, length: ${result.length}, finishReason: ${finishReason}`);
+    if (finishReason === 'length') {
+      console.warn('[write-digital-presence] WARNING: output was TRUNCATED by token limit (finishReason=length)');
+    }
+    return { digitalPresenceSection: result };
+  },
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// STEP — Write Market Benchmarks Section (parallel)
+// ────────────────────────────────────────────────────────────────────────────
+const writeMarketBenchmarks = createStep({
+  id: 'write-market-benchmarks',
+  description: 'Market benchmark writer agent generates the benchmarks section with web search',
+  inputSchema: reportInputSchema,
+  outputSchema: z.object({ benchmarksSection: z.string() }),
+  execute: async ({ inputData, mastra }) => {
+    console.log(`[write-market-benchmarks] ENTERED`);
+    const agent = mastra?.getAgent('marketBenchmarkWriterAgent');
+    if (!agent) throw new Error('marketBenchmarkWriterAgent not found');
+
+    const competitorAnalysisSection = inputData.competitorAnalyses.length > 0
+      ? inputData.competitorAnalyses.map((c) =>
+          `### Competitor: ${c.place_id}\n${c.analysis}`,
+        ).join('\n\n')
+      : 'No competitor analysis available.';
+
+    const prompt = `
+Write the **benchmarks** section (Section 6) for **${inputData.businessName}** (${inputData.businessType}).
+
+## FINANCIAL KPIs (for comparison table)
+- Net Revenue: ${inputData.netRevenue.toFixed(2)} SAR
+- Gross Margin: ${inputData.grossMargin.toFixed(2)}%
+- Net Margin: ${inputData.netMargin.toFixed(2)}%
+- Fixed Costs: ${inputData.fixedCosts.toFixed(2)} SAR
+- Contribution Margin Ratio: ${(inputData.contributionMarginRatio * 100).toFixed(2)}%
+
+## GOOGLE PLACE DATA (place_id: ${inputData.placeId})
+${JSON.stringify(inputData.placeDetails)}
 
 ## COMPETITOR LANDSCAPE (nearby businesses)
-${JSON.stringify(nearbyCompetitors)}
+${JSON.stringify(inputData.nearbyCompetitors)}
 
 ## COMPETITOR ANALYSIS (pre-analyzed)
 ${competitorAnalysisSection}
 
-## REVIEW SENTIMENT ANALYSIS
-${sentimentAnalysis}
+## SOCIAL HANDLES (for comparison table)
+- Instagram: ${inputData.instagramUser ? '@' + inputData.instagramUser : 'Not provided'}
+- TikTok: ${inputData.tiktokUser ? '@' + inputData.tiktokUser : 'Not provided'}
 
-## SOCIAL MEDIA AUDIT
-${socialAudit}
-
----
+## SOCIAL MEDIA AUDIT (for engagement rates in comparison table)
+${inputData.socialAudit}
 
 **COMPETITOR SWOT REQUIREMENT:**
 The competitor analysis summaries are provided above in "COMPETITOR ANALYSIS (pre-analyzed)". You MUST:
 1. Use the pre-analyzed competitor SWOT data provided above (already fetched and analyzed)
 2. Synthesize each competitor's strengths and weaknesses into the SWOT table
-3. Produce the SWOT mini-table in the Competitor Benchmarking section:
+3. If a competitor has zero reviews, infer from rating alone.
 
-| المنافس | القوة 1 | القوة 2 | الضعف الرئيسي |
-|---------|---------|---------|--------------|
-
-4. Reference each competitor weakness in at least one Action Plan item
-Do NOT skip this step. If a competitor has zero reviews, infer from rating alone.
-
----
-Using all the above data, produce the full Business Health Report following your instructions exactly.
-Calculate the Hybrid Health Score using the formula from your instructions.
-**MANDATORY: Write the entire report in Arabic. Section headers may be in English, but all analysis, insights, and recommendations must be in Arabic.**
+**MANDATORY: Write the entire section in Arabic. Follow your instructions exactly.**
+**MANDATORY: Use webSearchTool for 2 searches as specified in your instructions.**
 `;
 
-    const response = await synthesisAgent.generate([
-      { role: 'user', content: prompt },
-    ]);
+    const response = await agent.generate([{ role: 'user', content: prompt }], {
+      structuredOutput: {
+        schema: benchmarkSectionSchema,
+        jsonPromptInjection: true,
+      },
+    });
+    const result = (response as any).object?.sectionMarkdown ?? response.text ?? '';
+    console.log('[write-market-benchmarks] Done, length:', result.length);
+    return { benchmarksSection: result };
+  },
+});
 
-    const report = response.text ?? 'Report generation failed.';
-    console.log('[generate-report] Report generated, length:', report.length);
-    return { report };
+// ────────────────────────────────────────────────────────────────────────────
+// STEP — Compose Final Report (after parallel writers)
+// ────────────────────────────────────────────────────────────────────────────
+const composeReport = createStep({
+  id: 'compose-report',
+  description: 'Report composer assembles all sections into the final report',
+  inputSchema: reportInputSchema.extend({
+    financialsSection: z.string(),
+    digitalPresenceSection: z.string(),
+    benchmarksSection: z.string(),
+  }),
+  outputSchema: workflowOutputSchema,
+  execute: async ({ inputData, mastra }) => {
+    console.log(`[compose-report] ENTERED`);
+    console.log('[compose-report] input keys:', Object.keys(inputData));
+    console.log('[compose-report] input size (bytes):', JSON.stringify(inputData).length);
+    const agent = mastra?.getAgent('reportComposerAgent');
+    if (!agent) throw new Error('reportComposerAgent not found');
+
+    const prompt = `
+Compose the final F&B Business Intelligence Report for **${inputData.businessName}** (${inputData.businessType}).
+
+## YOUR TASKS:
+1. Write: header (business card + exec summary), health-score, assessment (strengths + weaknesses), action-plan
+2. Assemble ALL 7 sections in order, inserting the 3 pre-written sections exactly as provided
+
+## SOCIAL HANDLES (for §0 business card)
+- Instagram: ${inputData.instagramUser ? '@' + inputData.instagramUser : 'Not provided'}
+- TikTok: ${inputData.tiktokUser ? '@' + inputData.tiktokUser : 'Not provided'}
+
+${buildFinancialKPIsBlock(inputData)}
+
+## GOOGLE PLACE DATA (place_id: ${inputData.placeId})
+${JSON.stringify(inputData.placeDetails)}
+
+## COMPETITOR LANDSCAPE (nearby businesses — for competitive sub-score)
+${JSON.stringify(inputData.nearbyCompetitors)}
+
+## SOCIAL MEDIA AUDIT (for social sub-score + business card)
+${inputData.socialAudit}
+
+## REVIEW SENTIMENT ANALYSIS (for assessment strengths/weaknesses)
+${inputData.sentimentAnalysis}
+
+---
+
+## PRE-WRITTEN SECTIONS (insert these exactly as-is in the correct positions)
+
+### FINANCIALS SECTION (insert between health-score and digital-presence):
+${inputData.financialsSection}
+
+### DIGITAL PRESENCE SECTION (insert between financials and benchmarks):
+${inputData.digitalPresenceSection}
+
+### BENCHMARKS SECTION (insert between digital-presence and assessment):
+${inputData.benchmarksSection}
+
+---
+
+**MANDATORY: Write the entire report in Arabic. Section headers may be in English, but all analysis, insights, and recommendations must be in Arabic.**
+**MANDATORY: Calculate the Hybrid Health Score using the formula from your instructions.**
+**MANDATORY: Insert the 3 pre-written sections EXACTLY as provided — do not modify, summarize, or rewrite them.**
+`;
+
+    const response = await agent.generate([{ role: 'user', content: prompt }], {
+      structuredOutput: { schema: composerOutputSchema },
+    });
+    const report = (response as any).object?.report ?? response.text ?? 'Report generation failed.';
+    console.log('[compose-report] Report generated, length:', report.length);
+
+    // Forward structured data alongside the report for frontend UI rendering
+    const { financialsSection: _fs, digitalPresenceSection: _dp, benchmarksSection: _bs, ...structuredData } = inputData;
+    return { report, data: structuredData };
   },
 });
 
@@ -550,13 +713,23 @@ export const businessAnalysisWorkflow = createWorkflow({
   }),
   options: {
     onFinish: async (result) => {
-      console.log(`[workflow] ${result.workflowId} run ${result.runId} finished: ${result.status}`);
+      console.log(`[workflow:onFinish] run=${result.runId} status=${result.status}`);
+      console.log(`[workflow:onFinish] result keys:`, result.result ? Object.keys(result.result) : 'NO_RESULT');
+      console.log(`[workflow:onFinish] report length:`, (result.result as any)?.report?.length ?? 0);
+      if (result.status !== 'success') {
+        console.error(`[workflow:onFinish] non-success status — full result:`, JSON.stringify(result.result)?.slice(0, 500));
+      }
+      // Log every step's final status
+      for (const [stepId, stepResult] of Object.entries(result.steps)) {
+        console.log(`[workflow:onFinish] step ${stepId}: ${stepResult.status}${stepResult.status === 'failed' ? ` — ${stepResult.error}` : ''}`);
+      }
     },
     onError: async (errorInfo) => {
-      console.error(`[workflow] ${errorInfo.workflowId} failed:`, errorInfo.error?.message);
+      console.error(`[workflow:onError] ${errorInfo.workflowId} FAILED:`, errorInfo.error?.message);
+      console.error(`[workflow:onError] stack:`, errorInfo.error?.stack?.slice(0, 500));
       for (const [stepId, stepResult] of Object.entries(errorInfo.steps)) {
         if (stepResult.status === 'failed') {
-          console.error(`[workflow] Step ${stepId} failed:`, stepResult.error);
+          console.error(`[workflow:onError] step ${stepId}:`, stepResult.error);
         }
       }
     },
@@ -605,6 +778,23 @@ export const businessAnalysisWorkflow = createWorkflow({
       const socialAnalysis = parallelResult['social-and-analysis-path'] ?? {};
       const competitorAnalyses = parallelResult['competitor-pipeline'] ?? [];
 
+      console.log(`[merge-all] parallel keys:`, Object.keys(parallelResult));
+      console.log(`[merge-all] socialAnalysis keys:`, Object.keys(socialAnalysis));
+      console.log(`[merge-all] sentimentAnalysis length:`, socialAnalysis.sentimentAnalysis?.length ?? 0);
+      console.log(`[merge-all] socialAudit length:`, socialAnalysis.socialAudit?.length ?? 0);
+      console.log(`[merge-all] competitorAnalyses count:`, Array.isArray(competitorAnalyses) ? competitorAnalyses.length : typeof competitorAnalyses);
+      // Diagnostic: measure full merged payload
+      const _mergeAllResult = {
+        ...mergedData,
+        sentimentAnalysis: socialAnalysis.sentimentAnalysis ?? '',
+        socialAudit: socialAnalysis.socialAudit ?? '',
+        competitorAnalyses,
+      };
+      console.log('[merge-all] FULL DATA SIZE (bytes):', JSON.stringify(_mergeAllResult).length);
+      console.log('[merge-all] items count:', (_mergeAllResult as any).items?.length ?? 0);
+      console.log('[merge-all] competitors count:', (_mergeAllResult as any).nearbyCompetitors?.length ?? 0);
+      console.log('[merge-all] reviews count:', (_mergeAllResult as any).reviews?.reviews?.length ?? 0);
+
       return {
         ...mergedData,
         sentimentAnalysis: socialAnalysis.sentimentAnalysis ?? 'No reviews available for analysis.',
@@ -614,7 +804,22 @@ export const businessAnalysisWorkflow = createWorkflow({
     },
     { id: 'merge-all' },
   )
-  .then(generateReport);
+  // Parallel section writers: financials, digital-presence, benchmarks
+  .parallel([writeFinancials, writeDigitalPresence, writeMarketBenchmarks])
+  .map(
+    async ({ inputData, getStepResult }) => {
+      const mergeAllData = getStepResult<z.infer<typeof reportInputSchema>>('merge-all');
+      const parallelResult = inputData as Record<string, any>;
+      return {
+        ...mergeAllData,
+        financialsSection: parallelResult['write-financials']?.financialsSection ?? '',
+        digitalPresenceSection: parallelResult['write-digital-presence']?.digitalPresenceSection ?? '',
+        benchmarksSection: parallelResult['write-market-benchmarks']?.benchmarksSection ?? '',
+      };
+    },
+    { id: 'merge-sections' },
+  )
+  .then(composeReport);
 
 businessAnalysisWorkflow.commit();
 

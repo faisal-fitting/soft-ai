@@ -5,13 +5,16 @@ import { LibSQLStore } from '@mastra/libsql';
 import { Observability, DefaultExporter, CloudExporter, SensitiveDataFilter } from '@mastra/observability';
 import { businessAnalysisWorkflow } from './workflows/main-workflow';
 import { cboAgent } from './agents/CBO-agent';
-import { cboSynthesisAgent } from './agents/cbo-synthesis-agent';
+import { financialWriterAgent } from './agents/financial-writer-agent';
+import { digitalPresenceWriterAgent } from './agents/digital-presence-writer-agent';
+import { marketBenchmarkWriterAgent } from './agents/market-benchmark-writer-agent';
+import { reportComposerAgent } from './agents/report-composer-agent';
 import { semanticAnalysisAgent } from './agents/sematic-analysis';
 import { socialEngagementAuditor } from './agents/social-engagement-auditor';
 
 export const mastra = new Mastra({
   workflows: { businessAnalysisWorkflow },
-  agents: { cboAgent, cboSynthesisAgent, semanticAnalysisAgent, socialEngagementAuditor, },
+  agents: { cboAgent, financialWriterAgent, digitalPresenceWriterAgent, marketBenchmarkWriterAgent, reportComposerAgent, semanticAnalysisAgent, socialEngagementAuditor, },
   storage: new LibSQLStore({
     id: "mastra-storage",
     url: "libsql://cob-ai-faisal-a.aws-ap-south-1.turso.io",

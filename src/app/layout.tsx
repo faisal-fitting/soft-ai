@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "F&B Intelligence — تحليل الأعمال",
+  title: "CBO — تحليل الأعمال",
   description: "تحليل أعمال المطاعم والكافيهات بالذكاء الاصطناعي",
 };
 

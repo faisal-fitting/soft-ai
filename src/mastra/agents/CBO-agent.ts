@@ -44,12 +44,16 @@ Determine your operating mode before doing anything else:
   ❌ $$\frac{\text{...}}{\text{...}}$$
 `,
   model: 'openrouter/anthropic/claude-sonnet-4.6',
+  defaultOptions: {
+    modelSettings: {
+      maxOutputTokens: 64000,
+    },
+  },
   memory: new Memory({
-   options: {
-     workingMemory:{
-      enabled: true
-     }
-   },
+    options: {
+      observationalMemory: true,
+      generateTitle: true
+    },
   }),
   tools: {
     getPlaceDetails,

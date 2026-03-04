@@ -43,6 +43,34 @@ export const googleMapsReviewsTool = createTool({
   }),
   outputSchema: reviewsResponseSchema,
   execute: async ({ place_id, language, sort_by }) => {
+    if (process.env.MOCK_TOOLS === 'true') {
+      console.log(`[google-maps-reviews] MOCK — returning fake reviews for ${place_id}`);
+      return {
+        place_info: { title: 'فايل كوفي', address: 'حي النرجس، الرياض', rating: 4.3, reviews: 187, type: 'مقهى' },
+        topics: [
+          { keyword: 'القهوة', mentions: 52 },
+          { keyword: 'الخدمة', mentions: 38 },
+          { keyword: 'الجو', mentions: 24 },
+          { keyword: 'الأسعار', mentions: 18 },
+          { keyword: 'الانتظار', mentions: 14 },
+        ],
+        reviews: [
+          { position: 1, rating: 5, date: '2026-02-15', snippet: 'قهوة رائعة وخدمة سريعة، من أفضل المقاهي في الحي. أنصح بتجربة الكابتشينو.', user: { name: 'أحمد العتيبي', reviews: 12, photos: 3 }, details: { food: 5, service: 5, atmosphere: 4 } },
+          { position: 2, rating: 5, date: '2026-02-10', snippet: 'الجو هادئ ومريح للعمل، واي فاي ممتاز والقهوة لذيذة جداً.', user: { name: 'سارة المطيري', reviews: 28 }, details: { service: 5, atmosphere: 5 } },
+          { position: 3, rating: 4, date: '2026-02-01', snippet: 'تجربة جيدة بشكل عام، لكن الانتظار كان طويلاً في وقت الذروة.', user: { name: 'فهد الغامدي', reviews: 7 }, details: { food: 4, service: 3 } },
+          { position: 4, rating: 3, date: '2026-01-25', snippet: 'القهوة كويسة لكن الأسعار مرتفعة نسبياً مقارنة بالمنافسين في المنطقة.', user: { name: 'نورة الشمري', reviews: 45 }, details: { food: 4, service: 3, atmosphere: 3 } },
+          { position: 5, rating: 5, date: '2026-01-20', snippet: 'أفضل لاتيه جربته في الرياض، والموظفين محترفين ومرحبين.', user: { name: 'خالد الدوسري', reviews: 19 }, details: { food: 5, service: 5 } },
+          { position: 6, rating: 2, date: '2026-01-15', snippet: 'طلبت الكيك وكان جافاً ولم يكن طازجاً. يحتاجون لتحسين جودة المعجنات.', user: { name: 'ريم العنزي', reviews: 31 }, details: { food: 2, service: 3 } },
+          { position: 7, rating: 4, date: '2026-01-10', snippet: 'مكان جميل، الديكور أنيق والإضاءة مريحة. سأرجع بالتأكيد.', user: { name: 'عبدالله الحربي', reviews: 8 }, details: { atmosphere: 5, service: 4 } },
+          { position: 8, rating: 1, date: '2026-01-05', snippet: 'انتظرت 25 دقيقة للحصول على طلبي. غير مقبول في وقت الذروة.', user: { name: 'منال القحطاني', reviews: 22 }, details: { service: 1 } },
+          { position: 9, rating: 5, date: '2025-12-28', snippet: 'من أجمل المقاهي في الحي، نظيف ومرتب والطاقم ودود.', user: { name: 'تركي السبيعي', reviews: 14 }, details: { food: 5, service: 5, atmosphere: 5 } },
+          { position: 10, rating: 4, date: '2025-12-20', snippet: 'قهوة ممتازة لكن البار كان مزدحماً جداً. يحتاجون لزيادة الكاشير.', user: { name: 'هند الزهراني', reviews: 36 }, details: { food: 5, service: 3, atmosphere: 3 } },
+        ],
+        total_fetched: 10,
+        sort_used: sort_by ?? 'qualityScore',
+      };
+    }
+
     const hl = language ?? 'ar';
     const sortUsed = sort_by ?? 'qualityScore';
     const allReviews: z.infer<typeof reviewSchema>[] = [];

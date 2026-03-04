@@ -36,6 +36,33 @@ export const webSearchTool = createTool({
     query_used: z.string(),
   }),
   execute: async ({ query, language }) => {
+    if (process.env.MOCK_TOOLS === 'true') {
+      console.log(`[web-search] MOCK — returning fake results for: "${query}"`);
+      return {
+        results: [
+          {
+            title: 'سوق المقاهي في السعودية 2026 — تقرير Euromonitor',
+            snippet: 'يُقدَّر حجم سوق المقاهي والمشروبات في المملكة العربية السعودية بـ 4.2 مليار ريال في 2025، بمعدل نمو سنوي 8.5%. الرياض تستحوذ على 38% من السوق مع أكثر من 4,200 مقهى مرخص.',
+            link: 'https://www.euromonitor.com/saudi-cafes-2026',
+            position: 1,
+          },
+          {
+            title: 'معايير الربحية في قطاع المطاعم السعودي — GASTAT 2025',
+            snippet: 'متوسط هامش الربح الإجمالي لمقاهي الرياض: 58–65%. هامش الربح الصافي: 12–18%. نسبة التكاليف الثابتة: 28–33% من الإيرادات. متوسط قيمة الفاتورة: 42–58 ريال.',
+            link: 'https://www.stats.gov.sa/fnb-benchmarks-2025',
+            position: 2,
+          },
+          {
+            title: 'اتجاهات المستهلك السعودي في قطاع الأغذية والمشروبات 2026 — NielsenIQ',
+            snippet: 'ارتفع الطلب على القهوة المتخصصة بنسبة 23% خلال 2025. 67% من المستهلكين السعوديين يفضلون تجربة المقهى على الطلب الإلكتروني. الفئة العمرية 18–34 تمثل 61% من إجمالي زوار المقاهي.',
+            link: 'https://www.nielseniq.com/sa-consumer-trends-2026',
+            position: 3,
+          },
+        ],
+        query_used: query,
+      };
+    }
+
     const hl = language ?? 'ar';
 
     try {

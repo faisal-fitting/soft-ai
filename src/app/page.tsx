@@ -3,12 +3,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
-import type { ToolUIPart, DynamicToolUIPart } from "ai";
 import { motion, AnimatePresence } from "motion/react";
 import { Loader2 } from "lucide-react";
 
 import { getThreadMessages, saveThreadTitle } from "@/app/actions";
 import { WorkflowSidebar } from "@/components/workflow-sidebar";
+import { ReportView } from "@/components/report-view";
 import {
   BusinessForm,
   buildReportPrompt,
@@ -31,17 +31,223 @@ import {
   ConversationContent,
   ConversationScrollButton,
 } from "@/components/ai-elements/conversation";
-import {
-  Tool,
-  ToolHeader,
-  ToolContent,
-  ToolInput,
-  ToolOutput,
-} from "@/components/ai-elements/tool";
-import { Shimmer } from "@/components/ai-elements/shimmer";
 import { Suggestions, Suggestion } from "@/components/ai-elements/suggestion";
 
-// ── Helpers ────────────────────────────────────────────────────────────────
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+type WorkflowStep = { name: string; status: string; output?: unknown };
+type WorkflowData = { name: string; status: string; steps: Record<string, WorkflowStep> };
+
+/** Structured data from the workflow's compose-report step output */
+export type ReportData = {
+  businessName: string;
+  businessType: string;
+  netRevenue: number;
+  variableCosts: number;
+  fixedCosts: number;
+  totalCosts: number;
+  grossProfit: number;
+  netProfit: number;
+  grossMargin: number;
+  netMargin: number;
+  contributionMarginRatio: number;
+  breakEvenRevenue: number;
+  breakEvenGap: number;
+  isAboveBreakEven: boolean;
+  rawMaterials?: number;
+  packaging?: number;
+  items: Array<{
+    name: string;
+    sellingPrice: number;
+    soldUnits: number;
+    totalRevenue: number;
+    revenueShare: number;
+    contributionMarginPerUnit: number;
+    variableCostPerUnit: number;
+    fixedCostAllocationPerUnit: number;
+    fullCostPerUnit: number;
+    isBelowCost: boolean;
+    menuCategory: "star" | "plowhorse" | "puzzle" | "dog";
+    marginRank: number;
+    revenueRank: number;
+  }>;
+  placeDetails: {
+    rating?: number;
+    userRatingsTotal?: number;
+    displayName?: { text?: string };
+    formattedAddress?: string;
+    regularOpeningHours?: unknown;
+    reviews?: unknown[];
+    priceLevel?: string;
+  };
+  nearbyCompetitors: Array<{
+    id?: string;
+    displayName?: { text?: string } | string;
+    rating?: number;
+    userRatingCount?: number;
+    formattedAddress?: string;
+  }>;
+  reviews?: {
+    place_info?: { title?: string; rating?: number; reviews?: number };
+    reviews?: Array<{ rating?: number; snippet?: string; user?: { name?: string } }>;
+  };
+  sentimentAnalysis?: string;
+  socialAudit?: string;
+  competitorAnalyses?: unknown[];
+  instagramUser?: string;
+  tiktokUser?: string;
+};
+
+/** Parsed report sections from the markdown output */
+export type ReportMeta = {
+  businessName?: string;
+  businessType?: string;
+  healthScore?: number;
+  isAboveBreakEven?: boolean;
+  netMargin?: number;
+  grossMargin?: number;
+  googleRating?: number;
+  googleRatingCount?: number;
+  instagramEngagement?: number;
+  tiktokEngagement?: number;
+};
+
+export type ParsedReport = {
+  meta: ReportMeta | null;
+  sections: Record<string, string>;
+};
+
+/** Progressive section strings captured from writer steps before compose-report */
+export type ProgressiveSections = {
+  financialsSection?: string;
+  digitalPresenceSection?: string;
+  benchmarksSection?: string;
+};
+
+// ── parseReport ───────────────────────────────────────────────────────────────
+
+/**
+ * Parse the report markdown string into:
+ * - meta: structured JSON from <!-- REPORT_META { ... } -->
+ * - sections: map of section id → content string
+ *
+ * Section markers: <!-- SECTION: id --> ... <!-- END: id -->
+ */
+export function parseReport(markdown: string | null): ParsedReport {
+  if (!markdown) return { meta: null, sections: {} };
+
+  // Extract REPORT_META
+  let meta: ReportMeta | null = null;
+  const metaMatch = markdown.match(/<!--\s*REPORT_META\s*(\{[\s\S]*?\})\s*-->/);
+  if (metaMatch) {
+    try {
+      meta = JSON.parse(metaMatch[1]) as ReportMeta;
+    } catch {
+      // ignore parse errors
+    }
+  }
+
+  // Extract sections
+  const sections: Record<string, string> = {};
+  const sectionRe = /<!--\s*SECTION:\s*(\S+)\s*-->([\s\S]*?)<!--\s*END:\s*\1\s*-->/g;
+  let m: RegExpExecArray | null;
+  while ((m = sectionRe.exec(markdown)) !== null) {
+    sections[m[1]] = m[2].trim();
+  }
+
+  return { meta, sections };
+}
+
+// ── Mapping: raw step ID → summarized bucket key ──────────────────────────────
+
+const STEP_BUCKET: Record<string, string> = {
+  "collect-financials":         "financials",
+  "fetch-place-details":        "financials",
+  "write-financials":           "products",
+  "fetch-target-reviews":       "reviews",
+  "fetch-reviews":              "reviews",
+  "run-semantic-analysis":      "reviews",
+  "merge-external-data":        "reviews",
+  "fetch-social-media":         "social",
+  "skip-social-media":          "social",
+  "capture-input":              "social",
+  "normalize-social-data":      "social",
+  "run-social-audit":           "social",
+  "merge-social-analysis":      "social",
+  "social-and-analysis-path":   "social",
+  "write-digital-presence":     "social",
+  "fetch-nearby-competitors":   "competitors",
+  "select-top-competitors":     "competitors",
+  "process-competitor":         "competitors",
+  "analyze-competitor-reviews": "competitors",
+  "competitor-pipeline":        "competitors",
+  "write-market-benchmarks":    "competitors",
+  "merge-all":                  "action-plan",
+  "merge-sections":             "action-plan",
+  "compose-report":             "action-plan",
+};
+
+// Step IDs whose output we want to capture
+const CAPTURE_OUTPUT: Record<string, string> = {
+  "fetch-target-reviews":     "reviews",
+  "fetch-social-media":       "social",
+  "fetch-nearby-competitors": "competitors",
+  "compose-report":           "action-plan",
+  // Writer steps for progressive section rendering
+  "write-financials":         "write-financials",
+  "write-digital-presence":   "write-digital-presence",
+  "write-market-benchmarks":  "write-market-benchmarks",
+};
+
+/** Walk all workflow parts in all messages and derive report data + progressive sections */
+function deriveSteps(messages: UIMessage[]): {
+  reportData: ReportData | null;
+  progressiveSections: ProgressiveSections;
+} {
+  let reportData: ReportData | null = null;
+  const progressiveSections: ProgressiveSections = {};
+
+  for (const msg of messages) {
+    for (const part of msg.parts) {
+      if (part.type !== "data-workflow" && part.type !== "data-tool-workflow") continue;
+      const wp = part as unknown as { data: WorkflowData };
+      const steps = wp.data?.steps ?? {};
+      for (const [id, step] of Object.entries(steps)) {
+        if (!(id in CAPTURE_OUTPUT)) continue;
+
+        // Extract structured report data from compose-report output
+        if (id === "compose-report" && step.status === "success" && step.output) {
+          const o = step.output as { report?: string; data?: ReportData };
+          if (o.data && !reportData) reportData = o.data;
+        }
+
+        // Capture progressive section strings from writer steps
+        if (id === "write-financials" && step.status === "success" && step.output) {
+          const o = step.output as { financialsSection?: string };
+          if (o.financialsSection && !progressiveSections.financialsSection) {
+            progressiveSections.financialsSection = o.financialsSection;
+          }
+        }
+        if (id === "write-digital-presence" && step.status === "success" && step.output) {
+          const o = step.output as { digitalPresenceSection?: string };
+          if (o.digitalPresenceSection && !progressiveSections.digitalPresenceSection) {
+            progressiveSections.digitalPresenceSection = o.digitalPresenceSection;
+          }
+        }
+        if (id === "write-market-benchmarks" && step.status === "success" && step.output) {
+          const o = step.output as { benchmarksSection?: string };
+          if (o.benchmarksSection && !progressiveSections.benchmarksSection) {
+            progressiveSections.benchmarksSection = o.benchmarksSection;
+          }
+        }
+      }
+    }
+  }
+
+  return { reportData, progressiveSections };
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function getTextFromParts(msg: UIMessage): string {
   return msg.parts
@@ -54,209 +260,89 @@ function isReportRequest(msg: UIMessage): boolean {
   return msg.role === "user" && getTextFromParts(msg).startsWith("[GENERATE_REPORT_REQUEST]");
 }
 
-function isToolPart(part: { type: string }): boolean {
-  return part.type.startsWith("tool-") || part.type === "dynamic-tool";
-}
+// ── Chat Sidebar (left column in RTL) ─────────────────────────────────────────
 
-function isWorkflowPart(part: { type: string }): boolean {
-  return part.type === "data-workflow" || part.type === "data-tool-workflow";
-}
-
-type WorkflowStep = { name: string; status: string };
-type WorkflowData = { name: string; status: string; steps: Record<string, WorkflowStep> };
-
-function WorkflowSteps({ data, isStreaming }: { data: WorkflowData; isStreaming: boolean }) {
-  const steps = Object.values(data.steps);
-  const timesRef = useRef<Record<string, { start: number; end?: number }>>({});
-  const [, setTick] = useState(0);
-
-  // Record step start/end times
-  for (const s of steps) {
-    const t = timesRef.current[s.name];
-    if (s.status === "running" && !t) {
-      timesRef.current[s.name] = { start: Date.now() };
-    } else if ((s.status === "success" || s.status === "failed") && t && !t.end) {
-      timesRef.current[s.name] = { ...t, end: Date.now() };
-    }
-  }
-
-  // Tick every 500ms while a step is running so elapsed time updates live
-  const hasRunning = steps.some((s) => s.status === "running");
-  useEffect(() => {
-    if (!hasRunning) return;
-    const id = setInterval(() => setTick((n) => n + 1), 500);
-    return () => clearInterval(id);
-  }, [hasRunning]);
-
-  if (steps.length === 0) return null;
-
-  return (
-    <div className="mb-3 rounded-lg border bg-muted/20 p-4">
-      <div className="mb-3 flex items-center justify-between">
-        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          {data.name}
-        </span>
-        {isStreaming && <Loader2 className="size-3.5 animate-spin text-muted-foreground/50" />}
-      </div>
-      <div className="space-y-2.5">
-        {steps.map((s) => {
-          const t = timesRef.current[s.name];
-          const elapsed = t ? ((t.end ?? Date.now()) - t.start) / 1000 : null;
-          return (
-            <div key={s.name} className="flex items-center gap-3 text-sm">
-              <AnimatePresence mode="wait" initial={false}>
-                {s.status === "success" ? (
-                  <motion.span key="ok" initial={{ scale: 0, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: "spring", stiffness: 300, damping: 20 }} className="shrink-0 text-emerald-500">✓</motion.span>
-                ) : s.status === "failed" ? (
-                  <motion.span key="err" initial={{ scale: 0, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="shrink-0 text-red-500">✗</motion.span>
-                ) : s.status === "running" ? (
-                  <motion.span key="run" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="shrink-0">
-                    <Loader2 className="size-4 animate-spin text-primary" />
-                  </motion.span>
-                ) : (
-                  <motion.span key="pending" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="block size-4 shrink-0 rounded-full border border-muted-foreground/25" />
-                )}
-              </AnimatePresence>
-              <span className={
-                s.status === "running" ? "font-medium text-foreground" :
-                s.status === "success" ? "text-foreground/70" : "text-muted-foreground"
-              }>
-                {s.name}
-              </span>
-              {elapsed !== null && (
-                <span className="ml-auto tabular-nums text-xs text-muted-foreground/50">
-                  {elapsed.toFixed(1)}s
-                </span>
-              )}
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-// ── Chat panel (used inside ReportSession) ────────────────────────────────
-
-function ChatPanel({
+function ChatSidebar({
   messages,
   status,
   businessName,
+  hasReport,
   onSend,
   onStop,
 }: {
   messages: UIMessage[];
   status: string;
   businessName: string;
+  hasReport: boolean;
   onSend: (text: string) => void;
   onStop: () => void;
 }) {
   const isGenerating = status === "submitted" || status === "streaming";
   const [input, setInput] = useState("");
 
+  // Only show text parts; skip report request messages
   const displayMessages = messages.filter((m) => !isReportRequest(m));
-  const hasRequestInFlight = messages.some(isReportRequest);
-  const hasReport = displayMessages.some((m) => m.role === "assistant");
+
+  // Only show sidebar if there's a report in progress or done
+  if (!hasReport && !isGenerating) return null;
 
   return (
-    <div className="flex flex-1 flex-col overflow-hidden">
+    <aside className="flex w-72 shrink-0 flex-col border-r bg-background">
+      {/* Header */}
+      <div className="border-b px-4 py-3">
+        <p className="text-xs font-semibold text-muted-foreground text-right">محلل الأعمال</p>
+        {businessName && (
+          <p className="mt-0.5 text-sm font-medium text-foreground">{businessName}</p>
+        )}
+      </div>
+
+      {/* Messages */}
       <Conversation className="flex-1">
-        <ConversationContent className="mx-auto max-w-3xl px-6 py-6 gap-6">
-          {/* Generating banner while report is being created */}
+        <ConversationContent className="px-3 py-3 gap-4">
+          {/* Thinking indicator */}
           <AnimatePresence>
-            {hasRequestInFlight && (
-              <motion.div
-                key="generating-banner"
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -8 }}
-                transition={{ duration: 0.3 }}
-                className="flex items-center gap-3 rounded-xl border bg-muted/40 px-5 py-4 text-sm text-muted-foreground"
-              >
-                <Loader2 className="size-4 shrink-0 animate-spin text-primary" />
-                <Shimmer>{`جارٍ إنشاء تقرير تحليل الأعمال لـ ${businessName} — قد تستغرق العملية بضع دقائق…`}</Shimmer>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {/* Messages */}
-          <AnimatePresence initial={false}>
-            {displayMessages.map((msg) => (
-              <motion.div
-                key={msg.id}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.25 }}
-              >
-                <Message from={msg.role} dir="rtl">
-                  {/* Tool calls (assistant only) */}
-                  {msg.role === "assistant" &&
-                    msg.parts
-                      .filter((p) => isToolPart(p) || isWorkflowPart(p))
-                      .map((part, i) => {
-                        if (isWorkflowPart(part)) {
-                          const wp = part as unknown as { type: string; data: WorkflowData };
-                          return <WorkflowSteps key={i} data={wp.data} isStreaming={isGenerating} />;
-                        }
-                        const isDynamic = part.type === "dynamic-tool";
-                        const tp = part as unknown as ToolUIPart;
-                        const dp = part as unknown as DynamicToolUIPart;
-                        return (
-                          <Tool key={i}>
-                            {isDynamic ? (
-                              <ToolHeader
-                                type="dynamic-tool"
-                                state={dp.state}
-                                toolName={dp.toolName ?? ""}
-                              />
-                            ) : (
-                              <ToolHeader
-                                type={tp.type}
-                                state={tp.state}
-                              />
-                            )}
-                            <ToolContent>
-                              <ToolInput input={isDynamic ? dp.input : tp.input} />
-                              <ToolOutput
-                                output={isDynamic ? dp.output : tp.output}
-                                errorText={isDynamic ? dp.errorText : tp.errorText}
-                              />
-                            </ToolContent>
-                          </Tool>
-                        );
-                      })}
-
-                  {/* Text content */}
-                  <MessageContent>
-                    {msg.role === "assistant" ? (
-                      <MessageResponse>{getTextFromParts(msg)}</MessageResponse>
-                    ) : (
-                      <p className="text-sm">{getTextFromParts(msg)}</p>
-                    )}
-                  </MessageContent>
-                </Message>
-              </motion.div>
-            ))}
-          </AnimatePresence>
-
-          {/* Thinking indicator — stream active but no visible response yet */}
-          <AnimatePresence>
-            {isGenerating && !hasRequestInFlight && displayMessages.at(-1)?.role === "user" && (
+            {isGenerating && displayMessages.at(-1)?.role === "user" && (
               <motion.div
                 key="thinking"
                 initial={{ opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -6 }}
                 transition={{ duration: 0.2 }}
-                className="flex items-center gap-2 text-sm text-muted-foreground"
+                className="flex items-center gap-2 text-xs text-muted-foreground"
               >
-                <Loader2 className="size-4 animate-spin" />
+                <Loader2 className="size-3 animate-spin" />
                 <span>جارٍ المعالجة…</span>
               </motion.div>
             )}
           </AnimatePresence>
 
-          {/* Follow-up suggestions after first report */}
+          {/* Messages — text only, no tool/workflow parts */}
+          <AnimatePresence initial={false}>
+            {displayMessages.map((msg) => {
+              const text = getTextFromParts(msg);
+              if (!text) return null;
+              return (
+                <motion.div
+                  key={msg.id}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <Message from={msg.role} dir="rtl">
+                    <MessageContent>
+                      {msg.role === "assistant" ? (
+                        <MessageResponse>{text}</MessageResponse>
+                      ) : (
+                        <p className="text-sm">{text}</p>
+                      )}
+                    </MessageContent>
+                  </Message>
+                </motion.div>
+              );
+            })}
+          </AnimatePresence>
+
+          {/* Follow-up suggestions */}
           {!isGenerating && hasReport && (
             <Suggestions>
               <Suggestion suggestion="ما هي أهم التوصيات؟" onClick={onSend} />
@@ -268,40 +354,38 @@ function ChatPanel({
         <ConversationScrollButton />
       </Conversation>
 
-      {/* Input bar */}
-      <div className="border-t bg-background px-6 py-4">
-        <div className="mx-auto max-w-3xl">
-          <PromptInput
-            onSubmit={({ text }) => {
-              if (!text.trim() || isGenerating) return;
-              onSend(text);
-              setInput("");
-            }}
-          >
-            <PromptInputBody>
-              <PromptInputTextarea
-                value={input}
-                onChange={(e) => setInput(e.currentTarget.value)}
-                placeholder="اسأل سؤالاً عن التقرير..."
-                disabled={isGenerating}
-              />
-            </PromptInputBody>
-            <PromptInputFooter>
-              <span />
-              <PromptInputSubmit
-                status={status as "ready" | "submitted" | "streaming" | "error"}
-                onStop={onStop}
-                disabled={!input.trim() && !isGenerating}
-              />
-            </PromptInputFooter>
-          </PromptInput>
-        </div>
+      {/* Input */}
+      <div className="border-t bg-background px-3 py-3">
+        <PromptInput
+          onSubmit={({ text }) => {
+            if (!text.trim() || isGenerating) return;
+            onSend(text);
+            setInput("");
+          }}
+        >
+          <PromptInputBody>
+            <PromptInputTextarea
+              value={input}
+              onChange={(e) => setInput(e.currentTarget.value)}
+              placeholder="اسأل سؤالاً…"
+              disabled={isGenerating}
+            />
+          </PromptInputBody>
+          <PromptInputFooter>
+            <span />
+            <PromptInputSubmit
+              status={status as "ready" | "submitted" | "streaming" | "error"}
+              onStop={onStop}
+              disabled={!input.trim() && !isGenerating}
+            />
+          </PromptInputFooter>
+        </PromptInput>
       </div>
-    </div>
+    </aside>
   );
 }
 
-// ── Report session (keyed so it remounts cleanly on "New Report") ─────────
+// ── Report session ─────────────────────────────────────────────────────────────
 
 function ReportSession({
   onGeneratingChange,
@@ -350,7 +434,6 @@ function ReportSession({
 
   const { messages, sendMessage, status, stop, setMessages } = useChat({
     transport,
-    onData: (chunk) => console.log("[stream:data]", chunk),
     onError: (err) => console.error("[stream:error]", err),
   });
 
@@ -359,22 +442,36 @@ function ReportSession({
     if (localStorage.getItem("cbo-phase") !== "chat") return;
     getThreadMessages(threadId)
       .then((msgs) => {
+        console.log(`[ReportSession] loaded ${msgs.length} messages for thread ${threadId}`);
         setMessages(msgs as UIMessage[]);
         setLoadingHistory(false);
       })
-      .catch(() => setLoadingHistory(false));
+      .catch((err) => {
+        console.error(`[ReportSession] failed to load messages for thread ${threadId}:`, err);
+        setLoadingHistory(false);
+      });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const isGenerating = status === "submitted" || status === "streaming";
   const hasReport = messages.some((m) => m.role === "assistant");
 
+  // Derive report data and progressive sections from workflow parts
+  const derived = useMemo(() => deriveSteps(messages), [messages]);
+
+  // Propagate state changes up — use refs to avoid triggering re-renders on every render
   const prevGenerating = useRef(isGenerating);
   const prevHasReport = useRef(hasReport);
   useEffect(() => {
-    if (prevGenerating.current !== isGenerating) { prevGenerating.current = isGenerating; onGeneratingChange(isGenerating); }
-    if (prevHasReport.current !== hasReport) { prevHasReport.current = hasReport; onHasReportChange(hasReport); }
-  });
+    if (prevGenerating.current !== isGenerating) {
+      prevGenerating.current = isGenerating;
+      onGeneratingChange(isGenerating);
+    }
+    if (prevHasReport.current !== hasReport) {
+      prevHasReport.current = hasReport;
+      onHasReportChange(hasReport);
+    }
+  }, [isGenerating, hasReport, onGeneratingChange, onHasReportChange]);
 
   const handleFormSubmit = useCallback(
     async (data: FinancialFormData) => {
@@ -401,42 +498,82 @@ function ReportSession({
     );
   }
 
+  // Derive the report markdown — scan ALL assistant messages for text content
+  // (on reload, the workflow result lands in a separate assistant message with no text parts,
+  //  and the actual report text is in a subsequent assistant message)
+  const reportMarkdown =
+    messages
+      .filter((m) => m.role === "assistant")
+      .flatMap((m) => {
+        const t = getTextFromParts(m);
+        return t.length > 200 ? [t] : [];
+      })[0] ?? null;
+
+  const parsedReport = parseReport(reportMarkdown);
+
   return (
-    <AnimatePresence mode="wait">
-      {phase === "form" ? (
-        <motion.div
-          key="form"
-          className="flex w-full flex-1 items-start justify-center overflow-y-auto px-8 py-12"
-          initial={{ opacity: 0, x: -24 }}
-          animate={{ opacity: 1, x: 0 }}
-          exit={{ opacity: 0, x: -24 }}
-          transition={{ duration: 0.3, ease: "easeInOut" }}
-        >
-          <BusinessForm onSubmit={handleFormSubmit} isSubmitting={isGenerating} />
-        </motion.div>
-      ) : (
-        <motion.div
-          key="chat"
-          className="flex w-full flex-1 flex-col overflow-hidden"
-          initial={{ opacity: 0, x: 24 }}
-          animate={{ opacity: 1, x: 0 }}
-          exit={{ opacity: 0, x: 24 }}
-          transition={{ duration: 0.3, ease: "easeInOut" }}
-        >
-          <ChatPanel
-            messages={messages}
-            status={status}
-            businessName={businessName}
-            onSend={handleSend}
-            onStop={stop}
-          />
-        </motion.div>
-      )}
-    </AnimatePresence>
+    <div className="flex flex-1 overflow-hidden">
+      {/* Center: form (pre-report) or structured report view (post-report) */}
+      <AnimatePresence mode="wait">
+        {phase === "form" ? (
+          <motion.div
+            key="form"
+            className="flex flex-1 items-start justify-center overflow-y-auto px-8 py-12"
+            initial={{ opacity: 0, x: -24 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -24 }}
+            transition={{ duration: 0.3, ease: "easeInOut" }}
+          >
+            <BusinessForm onSubmit={handleFormSubmit} isSubmitting={isGenerating} />
+          </motion.div>
+        ) : (
+          <motion.div
+            key="report"
+            className="flex flex-1 overflow-hidden"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.3 }}
+          >
+            <ReportView
+              reportData={derived.reportData}
+              progressiveSections={derived.progressiveSections}
+              parsedReport={parsedReport}
+              reportMarkdown={reportMarkdown}
+              isGenerating={isGenerating}
+              businessName={businessName}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Left sidebar: chat (only visible once report has started) */}
+      <AnimatePresence>
+        {phase === "chat" && (
+          <motion.div
+            key="chat-sidebar"
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+            transition={{ duration: 0.3 }}
+            className="flex shrink-0"
+          >
+            <ChatSidebar
+              messages={messages}
+              status={status}
+              businessName={businessName}
+              hasReport={hasReport}
+              onSend={handleSend}
+              onStop={stop}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   );
 }
 
-// ── Page ──────────────────────────────────────────────────────────────────
+// ── Page ───────────────────────────────────────────────────────────────────────
 
 export default function Home() {
   const [sessionKey, setSessionKey] = useState(0);
@@ -462,15 +599,19 @@ export default function Home() {
   }, []);
 
   return (
+    // RTL: flex row is right-to-left. DOM order = right → left visually.
+    // 1st child (WorkflowSidebar) → right column
+    // 2nd child (main/ReportSession) → center + left columns
     <div className="flex h-screen overflow-hidden bg-background">
+      {/* Right sidebar: thread list (first in DOM = right in RTL) */}
       <WorkflowSidebar
         isGenerating={isGenerating}
-        hasReport={hasReport}
         onNewReport={handleNewReport}
         onSelectThread={handleSelectThread}
         sessionKey={sessionKey}
       />
 
+      {/* Center + left: report view + chat sidebar */}
       <main className="relative flex flex-1 overflow-hidden">
         <AnimatePresence mode="wait">
           <motion.div

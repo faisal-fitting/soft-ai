@@ -1,18 +1,41 @@
 "use server";
 
+import { unstable_noStore as noStore } from 'next/cache';
+
 import { toAISdkV5Messages } from '@mastra/ai-sdk/ui';
 import { mastra } from '@/mastra';
 
 export async function getThreadMessages(threadId: string) {
+  noStore();
   const agent = mastra.getAgent('cboAgent');
   const memory = await agent.getMemory();
-  if (!memory) return [];
+  if (!memory) {
+    console.log(`[getThreadMessages] No memory found for agent`);
+    return [];
+  }
 
   const { messages } = await memory.recall({ threadId, resourceId: "user" });
-  return toAISdkV5Messages(messages);
+  console.log(`[getThreadMessages] raw: ${messages.length}`);
+  const converted = toAISdkV5Messages(messages);
+  console.log(`[getThreadMessages] converted: ${JSON.stringify(converted.map((m) => ({
+    role: m.role,
+    parts: (m as unknown as { parts?: Array<{ type: string; text?: string }> }).parts?.map((p) => ({
+      type: p.type,
+      textLen: p.text?.length,
+      textPreview: p.text?.slice(0, 80),
+    })),
+    contentType: typeof (m as unknown as { content?: unknown }).content,
+    contentLen: typeof (m as unknown as { content?: unknown }).content === 'string'
+      ? ((m as unknown as { content: string }).content).length
+      : Array.isArray((m as unknown as { content?: unknown }).content)
+        ? (m as unknown as { content: unknown[] }).content.length
+        : 0,
+  })))}`);
+  return converted;
 }
 
 export async function listUserThreads() {
+  noStore();
   const agent = mastra.getAgent('cboAgent');
   const memory = await agent.getMemory();
   if (!memory) return [];

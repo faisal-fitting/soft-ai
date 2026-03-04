@@ -268,6 +268,59 @@ export const socialMediaScraperTool = createTool({
   }),
   outputSchema: socialDataSchema,
   execute: async ({ instagram_user, tiktok_user }) => {
+    if (process.env.MOCK_TOOLS === 'true') {
+      const igHandle = instagram_user.replace(/^@/, '');
+      const ttHandle = tiktok_user.replace(/^@/, '');
+      console.log(`[social-scraper] MOCK — returning fake social data for @${igHandle} / @${ttHandle}`);
+      return {
+        instagram: {
+          username: igHandle,
+          profileUrl: `https://www.instagram.com/${igHandle}/`,
+          followers: 48770,
+          following: 312,
+          postsCount: 184,
+          isVerified: false,
+          isBusinessAccount: true,
+          categoryName: 'Coffee Shop',
+          avgLikes: 1240,
+          avgComments: 38,
+          avgViews: 28500,
+          engagementRate: 2.6,
+          postsPerWeek: 3.5,
+          recentPosts: [
+            { caption: 'صباح القهوة 🌅 ابدأ يومك بكوب لاتيه دافئ من عندنا', likes: 1820, comments: 54, isReel: false, url: `https://www.instagram.com/p/mock1/`, date: '2026-02-20T08:00:00Z' },
+            { caption: 'منيو رمضان جاهز 🌙 تعالوا جربوا تشكيلة القهوة الموسمية', likes: 2340, comments: 87, isReel: false, url: `https://www.instagram.com/p/mock2/`, date: '2026-02-15T18:00:00Z' },
+            { caption: 'خلف الكواليس — كيف نحضر الكابتشينو المثالي', likes: 980, comments: 21, isReel: false, url: `https://www.instagram.com/p/mock3/`, date: '2026-02-10T10:00:00Z' },
+          ],
+          recentReels: [
+            { likes: 3100, comments: 112, views: 141000, isReel: true, url: `https://www.instagram.com/reel/mockreel1/`, date: '2026-02-18T15:00:00Z', duration: 18 },
+            { likes: 1650, comments: 45, views: 52000, isReel: true, url: `https://www.instagram.com/reel/mockreel2/`, date: '2026-02-12T12:00:00Z', duration: 22 },
+            { likes: 890, comments: 29, views: 21000, isReel: true, url: `https://www.instagram.com/reel/mockreel3/`, date: '2026-02-05T09:00:00Z', duration: 30 },
+          ],
+        },
+        tiktok: {
+          username: ttHandle,
+          profileUrl: `https://www.tiktok.com/@${ttHandle}`,
+          followers: 12400,
+          following: 88,
+          likes: 94000,
+          videosCount: 67,
+          avgViews: 18200,
+          avgLikes: 620,
+          avgComments: 42,
+          engagementRate: 5.3,
+          avgShareCount: 210,
+          avgSaveCount: 145,
+          postsPerWeek: 2.8,
+          recentVideos: [
+            { caption: 'أسرع طريقة تحضير إسبريسو في المنزل 🔥', likes: 1240, comments: 88, views: 67000, shares: 430, saves: 310, duration: 15, url: `https://www.tiktok.com/@${ttHandle}/video/mock1`, date: '2026-02-19T14:00:00Z' },
+            { caption: 'ريلز تحضير القهوة المثلجة — 3 خطوات بس', likes: 890, comments: 55, views: 34000, shares: 180, saves: 220, duration: 20, url: `https://www.tiktok.com/@${ttHandle}/video/mock2`, date: '2026-02-14T11:00:00Z' },
+            { caption: 'منيو جديد وصل 🎉 كولد برو بالتمر السعودي', likes: 540, comments: 31, views: 12000, shares: 90, saves: 75, duration: 25, url: `https://www.tiktok.com/@${ttHandle}/video/mock3`, date: '2026-02-08T16:00:00Z' },
+          ],
+        },
+      };
+    }
+
     const apiKey = process.env.SCRAPE_CREATORS_API_KEY!;
 
     const igHandle = instagram_user.replace(/^@/, '');
