@@ -275,7 +275,61 @@ const generateMarketSection = createStep({
   },
 });
 
-// ── Phase 3: Translation and Assembly ────────────────────────────────────────
+// ── Phase 3: Action Plan Synthesis ───────────────────────────────────────────
+
+const generateActionPlanSection = createStep({
+  id: 'generate-action-plan',
+  description: 'Synthesize unified action plan from expert sections',
+  inputSchema: z.object({
+    base: expertInputSchema,
+    financials: reportSectionSchema,
+    digital: reportSectionSchema,
+    market: reportSectionSchema,
+  }),
+  outputSchema: reportSectionSchema,
+  execute: async ({ inputData, mastra, writer }) => {
+    await writer?.write({ 
+      type: 'data-step-progress', 
+      data: { step: 'action-plan', status: 'running', message: 'جاري بناء خطة العمل...' } 
+    });
+    
+    const agent = mastra?.getAgent('cboAgent');
+    if (!agent) throw new Error('cboAgent not found');
+
+    const threadId = (inputData.base as any).threadId || `studio-${Date.now()}`;
+    
+    const prompt = `Synthesize Action Plan:
+Directive: ${JSON.stringify((inputData.base as any).directive)}
+Financial Section: ${JSON.stringify(inputData.financials)}
+Digital Section: ${JSON.stringify(inputData.digital)}
+Market Section: ${JSON.stringify(inputData.market)}`;
+    
+    const response = await agent.generate(prompt, {
+      memory: { thread: threadId, resource: 'user' },
+      structuredOutput: {
+        schema: reportSectionSchema,
+        errorStrategy: 'fallback',
+        fallbackValue: { 
+          id: 'action-plan', 
+          title: 'Action Plan', 
+          conclusion: { text: 'Action plan synthesis failed', severity: 'warning' }, 
+          visuals: [], 
+          narrative: 'Could not generate action plan.',
+          tacticalMoves: []
+        }
+      }
+    });
+    
+    await writer?.write({ 
+      type: 'data-step-progress', 
+      data: { step: 'action-plan', status: 'complete', message: 'تم بناء خطة العمل' } 
+    });
+    
+    return response.object;
+  },
+});
+
+// ── Phase 4: Translation and Assembly ────────────────────────────────────────
 
 const localizeManifest = createStep({
     id: 'localize-manifest',
@@ -365,6 +419,7 @@ const assembleManifest = createStep({
     financials: reportSectionSchema,
     digital: reportSectionSchema,
     market: reportSectionSchema,
+    actionPlan: reportSectionSchema,
   }),
   outputSchema: reportManifestSchema,
   execute: async ({ inputData }) => {
@@ -380,6 +435,7 @@ const assembleManifest = createStep({
         inputData.financials,
         inputData.digital,
         inputData.market,
+        inputData.actionPlan,
       ],
     };
   },
@@ -432,6 +488,15 @@ export const businessAnalysisWorkflow = createWorkflow({
       market: parallel['generate-market-section'],
     };
   }, { id: 'expert-aggregator' })
+  .then(generateActionPlanSection)
+  .map(async ({ inputData, getStepResult }) => {
+    const expertOutput = getStepResult<any>('expert-aggregator');
+    const actionPlan = inputData;
+    return {
+      ...expertOutput,
+      actionPlan,
+    };
+  }, { id: 'prepare-manifest' })
   .then(assembleManifest)
   .then(localizeManifest);
 

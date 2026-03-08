@@ -833,12 +833,120 @@ function AssessmentSection({ narrative }: { narrative?: string }) {
 
 // ── Action Plan Section ───────────────────────────────────────────────────────
 
-function ActionPlanSection({ narrative }: { narrative?: string }) {
-  if (!narrative) return null;
+type TacticalMove = {
+  action: string;
+  impact: string;
+  deadline: string;
+};
+
+function ActionPlanSection({ 
+  section 
+}: { 
+  section?: {
+    title: string;
+    conclusion: { text: string; severity: string };
+    narrative: string;
+    tacticalMoves?: TacticalMove[];
+  }
+}) {
+  if (!section) return null;
+
+  const getImpactColor = (impact: string) => {
+    switch (impact) {
+      case 'high': return 'bg-red-500';
+      case 'medium': return 'bg-amber-500';
+      case 'low': return 'bg-blue-500';
+      default: return 'bg-gray-500';
+    }
+  };
+
+  const getImpactLabel = (impact: string) => {
+    switch (impact) {
+      case 'high': return 'تأثير عالي';
+      case 'medium': return 'تأثير متوسط';
+      case 'low': return 'تأثير منخفض';
+      default: return impact;
+    }
+  };
+
+  const getSeverityBg = (severity: string) => {
+    switch (severity) {
+      case 'critical': return 'bg-red-50 border-red-200 dark:bg-red-950/20 dark:border-red-800/40';
+      case 'warning': return 'bg-amber-50 border-amber-200 dark:bg-amber-950/20 dark:border-amber-800/40';
+      case 'success': return 'bg-emerald-50 border-emerald-200 dark:bg-emerald-950/20 dark:border-emerald-800/40';
+      default: return 'bg-muted';
+    }
+  };
+
+  const getTimelineCategory = (deadline: string) => {
+    const d = deadline.toLowerCase();
+    if (d.includes('1 week') || d.includes('أسبوع') || d.includes('فوري') || d.includes('3 days') || d.includes('يوم')) {
+      return 'immediate';
+    } else if (d.includes('2 week') || d.includes('شهر') || d.includes('month')) {
+      return 'short';
+    }
+    return 'medium';
+  };
+
+  const moves = section.tacticalMoves || [];
+  const immediate = moves.filter(m => getTimelineCategory(m.deadline) === 'immediate');
+  const shortTerm = moves.filter(m => getTimelineCategory(m.deadline) === 'short');
+  const mediumTerm = moves.filter(m => getTimelineCategory(m.deadline) === 'medium');
+
   return (
-    <Section id="action-plan" title="خطة العمل" icon={<Zap className="size-5" />}>
-      <NarrativeBlock markdown={narrative} />
+    <Section id="action-plan" title={section.title || "خطة العمل"} icon={<Zap className="size-5" />}>
+      {/* Conclusion Alert */}
+      {section.conclusion && (
+        <div className={`rounded-lg p-4 mb-6 border ${getSeverityBg(section.conclusion.severity)}`}>
+          <p className="text-sm">{section.conclusion.text}</p>
+        </div>
+      )}
+
+      {/* Timeline View */}
+      <div className="space-y-6">
+        {immediate.length > 0 && (
+          <TimelinePhase title="فوري (أسبوع 1)" moves={immediate} getImpactColor={getImpactColor} getImpactLabel={getImpactLabel} />
+        )}
+        {shortTerm.length > 0 && (
+          <TimelinePhase title="قصير المدى (أسابيع 2-4)" moves={shortTerm} getImpactColor={getImpactColor} getImpactLabel={getImpactLabel} />
+        )}
+        {mediumTerm.length > 0 && (
+          <TimelinePhase title="متوسط المدى (شهر 2-3)" moves={mediumTerm} getImpactColor={getImpactColor} getImpactLabel={getImpactLabel} />
+        )}
+      </div>
+
+      {/* Narrative */}
+      {section.narrative && <NarrativeBlock markdown={section.narrative} />}
     </Section>
+  );
+}
+
+function TimelinePhase({ 
+  title, 
+  moves, 
+  getImpactColor,
+  getImpactLabel
+}: { 
+  title: string, 
+  moves: TacticalMove[],
+  getImpactColor: (impact: string) => string,
+  getImpactLabel: (impact: string) => string
+}) {
+  return (
+    <div className="border-r-2 border-primary/30 pr-4 space-y-3">
+      <h4 className="font-bold text-sm text-muted-foreground uppercase tracking-wide">{title}</h4>
+      {moves.map((move, i) => (
+        <div key={i} className="flex items-start gap-3 bg-card p-3 rounded-lg border">
+          <div className={`size-2 rounded-full mt-2 shrink-0 ${getImpactColor(move.impact)}`} />
+          <div className="flex-1">
+            <p className="text-sm font-medium">{move.action}</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              {getImpactLabel(move.impact)} • {move.deadline}
+            </p>
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -1083,8 +1191,11 @@ export function ReportView({
             )}
 
             {/* Action plan */}
-            {sections["action-plan"] && (
-              <ActionPlanSection key="action-plan" narrative={sections["action-plan"]} />
+            {manifest?.sections.find(s => s.id === 'action-plan') && (
+              <ActionPlanSection 
+                key="action-plan" 
+                section={manifest.sections.find(s => s.id === 'action-plan')} 
+              />
             )}
           </AnimatePresence>
 
