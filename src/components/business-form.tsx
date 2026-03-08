@@ -44,8 +44,9 @@ export interface MenuItemInput {
   name: string;
   sellingPrice: number;
   soldUnits: number;
-  rawMaterialCostPerUnit: number;
-  packagingCostPerUnit: number;
+  rawMaterialCostPerUnit?: number;
+  packagingCostPerUnit?: number;
+  totalCostPerUnit?: number;
   dailyProductionCapacity?: number;
 }
 
@@ -111,7 +112,7 @@ function NumericInput({
   onChange,
   placeholder = "0",
 }: {
-  value: number;
+  value?: number;
   onChange: (v: number) => void;
   placeholder?: string;
 }) {
@@ -120,7 +121,7 @@ function NumericInput({
       type="number"
       min={0}
       step="any"
-      value={value === 0 ? "" : value}
+      value={value === undefined || value === 0 ? "" : value}
       placeholder={placeholder}
       onChange={(e) => onChange(parseFloat(e.target.value) || 0)}
       className="tabular-nums"
@@ -256,8 +257,9 @@ const newItem = (): MenuItemInput => ({
   name: "",
   sellingPrice: 0,
   soldUnits: 0,
-  rawMaterialCostPerUnit: 0,
-  packagingCostPerUnit: 0,
+  rawMaterialCostPerUnit: undefined,
+  packagingCostPerUnit: undefined,
+  totalCostPerUnit: undefined,
   dailyProductionCapacity: undefined,
 });
 
@@ -297,6 +299,24 @@ export function BusinessForm({ onSubmit, isSubmitting }: Props) {
 
   // Track cost mode per item ("detailed" | "total")
   const [costModes, setCostModes] = useState<Array<"detailed" | "total">>([]);
+
+  // Validate items for unrealistic costs
+  const validateItems = (items: MenuItemInput[]) => {
+    const warnings: string[] = [];
+    items.forEach((item, i) => {
+      if (!item.name.trim()) return;
+      const cost = item.totalCostPerUnit ?? item.rawMaterialCostPerUnit ?? 0;
+      if (item.sellingPrice > 0 && cost > item.sellingPrice * 0.8) {
+        warnings.push(`المنتج "${item.name}": التكلفة مرتفعة جداً (${cost.toFixed(2)} ر.س مقابل سعر ${item.sellingPrice.toFixed(2)} ر.س)`);
+      }
+      if (item.sellingPrice === 0 && cost > 0) {
+        warnings.push(`المنتج "${item.name}": السعر يجب أن يكون أكبر من صفر`);
+      }
+    });
+    return warnings;
+  };
+
+  const costWarnings = validateItems(data.items);
 
   // File input ref for Excel import
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -353,8 +373,7 @@ export function BusinessForm({ onSubmit, isSubmitting }: Props) {
       }
       // "إجمالي التكلفة" overrides raw material cost and signals total mode
       if (row["إجمالي التكلفة"] !== undefined) {
-        item.rawMaterialCostPerUnit = Number(row["إجمالي التكلفة"]) || 0;
-        item.packagingCostPerUnit = 0;
+        item.totalCostPerUnit = Number(row["إجمالي التكلفة"]) || 0;
       }
       return item;
     }).filter((it) => it.name.trim());
@@ -665,10 +684,10 @@ export function BusinessForm({ onSubmit, isSubmitting }: Props) {
                     </Field>
 
                     {costModes[i] === "total" ? (
-                      <Field label="إجمالي تكلفة الوحدة (SAR)">
+                      <Field label="إجمالي تكلفة الوحدة شهرياً (SAR)">
                         <NumericInput
-                          value={item.rawMaterialCostPerUnit}
-                          onChange={(v) => setItem(i, "rawMaterialCostPerUnit", v)}
+                          value={item.totalCostPerUnit}
+                          onChange={(v) => setItem(i, "totalCostPerUnit", v)}
                         />
                       </Field>
                     ) : (
@@ -733,6 +752,16 @@ export function BusinessForm({ onSubmit, isSubmitting }: Props) {
 
           {/* Submit */}
           <div className="pt-2">
+            {costWarnings.length > 0 && (
+              <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-200">
+                <p className="font-semibold">تحذيرات:</p>
+                <ul className="mt-1 list-inside list-disc">
+                  {costWarnings.map((w, i) => (
+                    <li key={i}>{w}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
             <Button
               className="w-full"
               onClick={handleSubmit}

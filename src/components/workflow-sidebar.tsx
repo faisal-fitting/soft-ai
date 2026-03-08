@@ -6,6 +6,7 @@ import { PlusCircle, MessageSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { listUserThreads } from "@/app/actions";
+import { useReportStore } from "@/store/report-store";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -46,8 +47,7 @@ export function WorkflowSidebar({
   isGenerating,
 }: Props) {
   const [threads, setThreads] = useState<Thread[]>([]);
-  const activeThreadId =
-    typeof window !== "undefined" ? localStorage.getItem("cbo-thread-id") : null;
+  const activeThreadId = useReportStore((s) => s.threadId);
 
   useEffect(() => {
     listUserThreads()

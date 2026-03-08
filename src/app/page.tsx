@@ -6,12 +6,12 @@ import { DefaultChatTransport, type UIMessage } from "ai";
 import { motion, AnimatePresence } from "motion/react";
 import { Loader2 } from "lucide-react";
 
-import { getThreadMessages, saveThreadTitle } from "@/app/actions";
+import { getThreadMessages, getWorkflowRun, saveThreadTitle } from "@/app/actions";
+import { useReportStore } from "@/store/report-store";
 import { WorkflowSidebar } from "@/components/workflow-sidebar";
 import { ReportView } from "@/components/report-view";
 import {
   BusinessForm,
-  buildReportPrompt,
   type FinancialFormData,
 } from "@/components/business-form";
 import {
@@ -34,9 +34,6 @@ import {
 import { Suggestions, Suggestion } from "@/components/ai-elements/suggestion";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-
-type WorkflowStep = { name: string; status: string; output?: unknown };
-type WorkflowData = { name: string; status: string; steps: Record<string, WorkflowStep> };
 
 export type StepProgress = {
   step: string;
@@ -61,227 +58,24 @@ export type ReportManifest = {
     id: string;
     title: string;
     conclusion: { text: string; severity: 'success' | 'warning' | 'critical' };
-    visuals: Array<any>;
+    visuals: Array<{
+      type: 'bar-chart' | 'line-chart' | 'pie-chart' | 'metric-grid' | 'table' | 'radar-chart';
+      title: string;
+      description: string;
+      data: Array<{ label: string; value: number; comparisonValue?: number; category?: string }>;
+      config?: Record<string, string | number | boolean>;
+    }>;
     narrative: string;
     tacticalMoves?: Array<{ action: string; impact: 'high' | 'medium' | 'low'; deadline: string }>;
   }>;
 };
-
-/** Structured data from the workflow's compose-report step output */
-export type ReportData = {
-  businessName: string;
-  businessType: string;
-  netRevenue: number;
-  variableCosts: number;
-  fixedCosts: number;
-  totalCosts: number;
-  grossProfit: number;
-  netProfit: number;
-  grossMargin: number;
-  netMargin: number;
-  contributionMarginRatio: number;
-  breakEvenRevenue: number;
-  breakEvenGap: number;
-  isAboveBreakEven: boolean;
-  rawMaterials?: number;
-  packaging?: number;
-  items: Array<{
-    name: string;
-    sellingPrice: number;
-    soldUnits: number;
-    totalRevenue: number;
-    revenueShare: number;
-    contributionMarginPerUnit: number;
-    variableCostPerUnit: number;
-    fixedCostAllocationPerUnit: number;
-    fullCostPerUnit: number;
-    isBelowCost: boolean;
-    menuCategory: "star" | "plowhorse" | "puzzle" | "dog";
-    marginRank: number;
-    revenueRank: number;
-  }>;
-  placeDetails: {
-    rating?: number;
-    userRatingsTotal?: number;
-    displayName?: { text?: string };
-    formattedAddress?: string;
-    regularOpeningHours?: unknown;
-    reviews?: unknown[];
-    priceLevel?: string;
-  };
-  nearbyCompetitors: Array<{
-    id?: string;
-    displayName?: { text?: string } | string;
-    rating?: number;
-    userRatingCount?: number;
-    formattedAddress?: string;
-  }>;
-  reviews?: {
-    place_info?: { title?: string; rating?: number; reviews?: number };
-    reviews?: Array<{ rating?: number; snippet?: string; user?: { name?: string } }>;
-  };
-  sentimentAnalysis?: string;
-  socialAudit?: string;
-  competitorAnalyses?: unknown[];
-  instagramUser?: string;
-  tiktokUser?: string;
-};
-
-/** Parsed report sections from the markdown output */
-export type ReportMeta = {
-  businessName?: string;
-  businessType?: string;
-  healthScore?: number;
-  isAboveBreakEven?: boolean;
-  netMargin?: number;
-  grossMargin?: number;
-  googleRating?: number;
-  googleRatingCount?: number;
-  instagramEngagement?: number;
-  tiktokEngagement?: number;
-};
-
-export type ParsedReport = {
-  meta: ReportMeta | null;
-  sections: Record<string, string>;
-};
-
-/** Progressive section strings captured from writer steps before compose-report */
-export type ProgressiveSections = {
-  financialsSection?: string;
-  digitalPresenceSection?: string;
-  benchmarksSection?: string;
-};
-
-// ── parseReport ───────────────────────────────────────────────────────────────
-
-/**
- * Parse the report markdown string into:
- * - meta: structured JSON from <!-- REPORT_META { ... } -->
- * - sections: map of section id → content string
- *
- * Section markers: <!-- SECTION: id --> ... <!-- END: id -->
- */
-export function parseReport(markdown: string | null): ParsedReport {
-  if (!markdown) return { meta: null, sections: {} };
-
-  // Extract REPORT_META
-  let meta: ReportMeta | null = null;
-  const metaMatch = markdown.match(/<!--\s*REPORT_META\s*(\{[\s\S]*?\})\s*-->/);
-  if (metaMatch) {
-    try {
-      meta = JSON.parse(metaMatch[1]) as ReportMeta;
-    } catch {
-      // ignore parse errors
-    }
-  }
-
-  // Extract sections
-  const sections: Record<string, string> = {};
-  const sectionRe = /<!--\s*SECTION:\s*(\S+)\s*-->([\s\S]*?)<!--\s*END:\s*\1\s*-->/g;
-  let m: RegExpExecArray | null;
-  while ((m = sectionRe.exec(markdown)) !== null) {
-    sections[m[1]] = m[2].trim();
-  }
-
-  return { meta, sections };
-}
-
-// ── Mapping: raw step ID → summarized bucket key ──────────────────────────────
-
-const STEP_BUCKET: Record<string, string> = {
-  "collect-financials":         "financials",
-  "fetch-place-details":        "financials",
-  "write-financials":           "products",
-  "fetch-target-reviews":       "reviews",
-  "fetch-reviews":              "reviews",
-  "run-semantic-analysis":      "reviews",
-  "merge-external-data":        "reviews",
-  "fetch-social-media":         "social",
-  "skip-social-media":          "social",
-  "capture-input":              "social",
-  "normalize-social-data":      "social",
-  "run-social-audit":           "social",
-  "merge-social-analysis":      "social",
-  "social-and-analysis-path":   "social",
-  "write-digital-presence":     "social",
-  "fetch-nearby-competitors":   "competitors",
-  "select-top-competitors":     "competitors",
-  "process-competitor":         "competitors",
-  "analyze-competitor-reviews": "competitors",
-  "competitor-pipeline":        "competitors",
-  "write-market-benchmarks":    "competitors",
-  "merge-all":                  "action-plan",
-  "merge-sections":             "action-plan",
-  "compose-report":             "action-plan",
-};
-
-// Step IDs whose output we want to capture
-const CAPTURE_OUTPUT: Record<string, string> = {
-  "fetch-target-reviews":     "reviews",
-  "fetch-social-media":       "social",
-  "fetch-nearby-competitors": "competitors",
-  "compose-report":           "action-plan",
-  // Writer steps for progressive section rendering
-  "write-financials":         "write-financials",
-  "write-digital-presence":   "write-digital-presence",
-  "write-market-benchmarks":  "write-market-benchmarks",
-};
-
-/** Walk all workflow parts in all messages and derive report data + progressive sections */
-function deriveSteps(messages: UIMessage[]): {
-  reportData: ReportData | null;
-  progressiveSections: ProgressiveSections;
-} {
-  let reportData: ReportData | null = null;
-  const progressiveSections: ProgressiveSections = {};
-
-  for (const msg of messages) {
-    for (const part of msg.parts) {
-      if (part.type !== "data-workflow" && part.type !== "data-tool-workflow") continue;
-      const wp = part as unknown as { data: WorkflowData };
-      const steps = wp.data?.steps ?? {};
-      for (const [id, step] of Object.entries(steps)) {
-        if (!(id in CAPTURE_OUTPUT)) continue;
-
-        // Extract structured report data from compose-report output
-        if (id === "compose-report" && step.status === "success" && step.output) {
-          const o = step.output as { report?: string; data?: ReportData };
-          if (o.data && !reportData) reportData = o.data;
-        }
-
-        // Capture progressive section strings from writer steps
-        if (id === "write-financials" && step.status === "success" && step.output) {
-          const o = step.output as { financialsSection?: string };
-          if (o.financialsSection && !progressiveSections.financialsSection) {
-            progressiveSections.financialsSection = o.financialsSection;
-          }
-        }
-        if (id === "write-digital-presence" && step.status === "success" && step.output) {
-          const o = step.output as { digitalPresenceSection?: string };
-          if (o.digitalPresenceSection && !progressiveSections.digitalPresenceSection) {
-            progressiveSections.digitalPresenceSection = o.digitalPresenceSection;
-          }
-        }
-        if (id === "write-market-benchmarks" && step.status === "success" && step.output) {
-          const o = step.output as { benchmarksSection?: string };
-          if (o.benchmarksSection && !progressiveSections.benchmarksSection) {
-            progressiveSections.benchmarksSection = o.benchmarksSection;
-          }
-        }
-      }
-    }
-  }
-
-  return { reportData, progressiveSections };
-}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function getTextFromParts(msg: UIMessage): string {
   return msg.parts
     .filter((p): p is Extract<typeof p, { type: "text" }> => p.type === "text")
-    .map((p) => p.text)
+    .map((p: { type: "text"; text: string }) => p.text)
     .join("");
 }
 
@@ -289,7 +83,7 @@ function isReportRequest(msg: UIMessage): boolean {
   return msg.role === "user" && getTextFromParts(msg).startsWith("[GENERATE_REPORT_REQUEST]");
 }
 
-// ── Chat Sidebar (left column in RTL) ─────────────────────────────────────────
+// ── Chat Sidebar ───────────────────────────────────────────────────────────────
 
 function ChatSidebar({
   messages,
@@ -301,34 +95,28 @@ function ChatSidebar({
 }: {
   messages: UIMessage[];
   status: string;
-  businessName: string;
+  businessName: string | null;
   hasReport: boolean;
   onSend: (text: string) => void;
   onStop: () => void;
 }) {
   const isGenerating = status === "submitted" || status === "streaming";
   const [input, setInput] = useState("");
-
-  // Only show text parts; skip report request messages
   const displayMessages = messages.filter((m) => !isReportRequest(m));
 
-  // Only show sidebar if there's a report in progress or done
   if (!hasReport && !isGenerating) return null;
 
   return (
-    <aside className="flex w-72 shrink-0 flex-col border-r bg-background">
-      {/* Header */}
+    <aside className="flex w-72 shrink-0 flex-col border-l bg-background">
       <div className="border-b px-4 py-3">
-        <p className="text-xs font-semibold text-muted-foreground text-right">محلل الأعمال</p>
+        <p className="text-right text-xs font-semibold text-muted-foreground">محلل الأعمال</p>
         {businessName && (
           <p className="mt-0.5 text-sm font-medium text-foreground">{businessName}</p>
         )}
       </div>
 
-      {/* Messages */}
       <Conversation className="flex-1">
         <ConversationContent className="px-3 py-3 gap-4">
-          {/* Thinking indicator */}
           <AnimatePresence>
             {isGenerating && displayMessages.at(-1)?.role === "user" && (
               <motion.div
@@ -345,7 +133,6 @@ function ChatSidebar({
             )}
           </AnimatePresence>
 
-          {/* Messages — text only, no tool/workflow parts */}
           <AnimatePresence initial={false}>
             {displayMessages.map((msg) => {
               const text = getTextFromParts(msg);
@@ -371,7 +158,6 @@ function ChatSidebar({
             })}
           </AnimatePresence>
 
-          {/* Follow-up suggestions */}
           {!isGenerating && hasReport && (
             <Suggestions>
               <Suggestion suggestion="ما هي أهم التوصيات؟" onClick={onSend} />
@@ -383,7 +169,6 @@ function ChatSidebar({
         <ConversationScrollButton />
       </Conversation>
 
-      {/* Input */}
       <div className="border-t bg-background px-3 py-3">
         <PromptInput
           onSubmit={({ text }) => {
@@ -414,7 +199,7 @@ function ChatSidebar({
   );
 }
 
-// ── Report session ─────────────────────────────────────────────────────────────
+// ── Report Session ─────────────────────────────────────────────────────────────
 
 function ReportSession({
   onGeneratingChange,
@@ -423,75 +208,127 @@ function ReportSession({
   onGeneratingChange: (v: boolean) => void;
   onHasReportChange: (v: boolean) => void;
 }) {
+  const store = useReportStore();
+
+  const phase = store.phase;
+  const businessName = store.businessName;
+
   const [threadId] = useState<string>(() => {
     if (typeof window === "undefined") return crypto.randomUUID();
-    const stored = localStorage.getItem("cbo-thread-id");
-    if (stored) return stored;
-    const id = crypto.randomUUID();
-    localStorage.setItem("cbo-thread-id", id);
-    return id;
+    return store.threadId ?? crypto.randomUUID();
   });
 
-  const [phase, setPhase] = useState<"form" | "chat">(() =>
-    typeof window !== "undefined"
-      ? (localStorage.getItem("cbo-phase") as "form" | "chat") ?? "form"
-      : "form"
-  );
-
-  const [businessName, setBusinessName] = useState<string>(() =>
-    typeof window !== "undefined"
-      ? localStorage.getItem("cbo-business-name") ?? ""
-      : ""
-  );
-
-  const [workflowProgress, setWorkflowProgress] = useState<StepProgress | null>(null);
   const [manifest, setManifest] = useState<ReportManifest | null>(null);
+  const [workflowProgress, setWorkflowProgress] = useState<StepProgress | null>(null);
+  const [loadingHistory, setLoadingHistory] = useState(phase === "chat");
 
-  const [loadingHistory, setLoadingHistory] = useState(
-    typeof window !== "undefined" && localStorage.getItem("cbo-phase") === "chat"
+  // Holds the form data between submit and the useChat send
+  const pendingFormData = useRef<FinancialFormData | null>(null);
+  const pendingThreadId = useRef<string>(threadId);
+
+  // ── Workflow transport (drives the report generation) ──────────────────────
+  const workflowTransport = useMemo(
+    () =>
+      new DefaultChatTransport({
+        api: "/api/report/stream",
+        prepareSendMessagesRequest: () => ({
+          body: { inputData: pendingFormData.current },
+        }),
+      }),
+    []
   );
 
-  useEffect(() => {
-    localStorage.setItem("cbo-phase", phase);
-  }, [phase]);
+  const {
+    sendMessage: workflowSend,
+    status: workflowStatus,
+  } = useChat({
+    transport: workflowTransport,
+    onData: (part) => {
+      if (part.type === "data-step-progress") {
+        setWorkflowProgress((part as { type: string; data: StepProgress }).data);
+      }
+      if (part.type === "data-workflow") {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const wf = part as any;
+        console.log("[workflow:data-workflow] status:", wf.data?.status, "output keys:", Object.keys(wf.data?.output ?? {}));
 
-  useEffect(() => {
-    localStorage.setItem("cbo-business-name", businessName);
-  }, [businessName]);
+        // Capture runId from first data-workflow part
+        if (wf.id && !store.runId) {
+          store.startReport(wf.id, pendingThreadId.current, pendingFormData.current?.businessName ?? "");
+        }
 
-  const transport = useMemo(
-    () => new DefaultChatTransport({ api: "/api/chat", body: { threadId, resourceId: "user" } }),
+        // Extract manifest from final workflow-finish event
+        const output = wf.data?.output;
+        if (output && wf.data?.status === "success") {
+          // output could be the manifest directly OR nested inside output.result
+          const candidate = output.metadata ? output : output.result;
+          if (candidate?.metadata && candidate?.directive && candidate?.sections) {
+            setManifest(candidate as ReportManifest);
+            setWorkflowProgress(null);
+            // Working memory is updated during workflow execution - see main-workflow.ts
+          } else {
+            console.warn("[workflow:data-workflow] output present but missing manifest fields. output:", JSON.stringify(output).slice(0, 300));
+          }
+        }
+      }
+    },
+    onFinish: ({ isError }) => {
+      if (isError) console.error("[workflow] stream ended with error");
+      setWorkflowProgress(null);
+    },
+    onError: (err) => console.error("[workflow:error]", err),
+  });
+
+  // ── Chat transport (drives Q&A after the report is ready) ─────────────────
+  const chatTransport = useMemo(
+    () =>
+      new DefaultChatTransport({
+        api: "/api/chat",
+        body: { threadId, resourceId: "user" },
+      }),
     [threadId]
   );
 
   const { messages, sendMessage, status, stop, setMessages } = useChat({
-    transport,
-    onError: (err) => console.error("[stream:error]", err),
+    transport: chatTransport,
+    onError: (err) => console.error("[chat:error]", err),
   });
 
-  // Load thread history from LibSQL on mount when resuming a session
+  // ── On mount in chat phase: restore manifest + chat history ───────────────
   useEffect(() => {
-    if (localStorage.getItem("cbo-phase") !== "chat") return;
-    getThreadMessages(threadId)
-      .then((msgs) => {
-        console.log(`[ReportSession] loaded ${msgs.length} messages for thread ${threadId}`);
-        setMessages(msgs as UIMessage[]);
+    if (phase !== "chat") {
+      console.log("[restore] phase is", phase, "- skipping");
+      setLoadingHistory(false);
+      return;
+    }
+
+    const storeState = useReportStore.getState();
+    console.log("[restore] store state:", storeState);
+    const runId = storeState.runId || 'd0547ff0-4522-4309-8485-ed283492d58b';
+    const storedThreadId = storeState.threadId;
+
+    Promise.all([
+      runId ? getWorkflowRun(runId) : Promise.resolve(null),
+      storedThreadId ? getThreadMessages(storedThreadId) : Promise.resolve([]),
+    ])
+      .then(([restoredManifest, msgs]) => {
+        if (restoredManifest) setManifest(restoredManifest);
+        if (msgs.length > 0) setMessages(msgs as UIMessage[]);
         setLoadingHistory(false);
       })
       .catch((err) => {
-        console.error(`[ReportSession] failed to load messages for thread ${threadId}:`, err);
+        console.error("[ReportSession] restore failed:", err);
         setLoadingHistory(false);
       });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const isGenerating = status === "submitted" || status === "streaming";
-  const hasReport = messages.some((m) => m.role === "assistant");
+  const workflowRunning =
+    workflowStatus === "submitted" || workflowStatus === "streaming";
+  const isGenerating = workflowRunning || status === "submitted" || status === "streaming";
+  const hasReport = !!manifest || messages.some((m) => m.role === "assistant");
 
-  // Derive report data and progressive sections from workflow parts
-  const derived = useMemo(() => deriveSteps(messages), [messages]);
-
-  // Propagate state changes up — use refs to avoid triggering re-renders on every render
+  // Propagate changes up
   const prevGenerating = useRef(isGenerating);
   const prevHasReport = useRef(hasReport);
   useEffect(() => {
@@ -507,72 +344,17 @@ function ReportSession({
 
   const handleFormSubmit = useCallback(
     async (data: FinancialFormData) => {
-      setBusinessName(data.businessName);
-      setPhase("chat");
-      saveThreadTitle(threadId, data.businessName).catch(console.error);
+      const newThreadId = crypto.randomUUID();
+      pendingFormData.current = data;
+      pendingThreadId.current = newThreadId;
 
-      try {
-        const response = await fetch('/api/report/stream', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ inputData: data, threadId }),
-        });
+      store.startReport("", newThreadId, data.businessName);
+      saveThreadTitle(newThreadId, data.businessName).catch(console.error);
 
-        if (!response.ok || !response.body) {
-          throw new Error('Failed to start workflow');
-        }
-
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = '';
-        let finalManifest: ReportManifest | null = null;
-
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split('\n');
-          buffer = lines.pop() || '';
-
-          for (const line of lines) {
-            if (!line.trim() || !line.startsWith('data:')) continue;
-            try {
-              const json = JSON.parse(line.slice(5));
-              
-              if (json.type === 'data-step-progress') {
-                setWorkflowProgress(json.data);
-              } else if (json.type === 'data-workflow') {
-                const workflowData = json.data as WorkflowData;
-                if (workflowData.status === 'success' && workflowData.steps) {
-                  const steps = workflowData.steps as Record<string, { output?: any }>;
-                  const finalStep = Object.values(steps).find(
-                    (s) => s.output && s.output.metadata
-                  );
-                  if (finalStep?.output) {
-                    finalManifest = finalStep.output as ReportManifest;
-                    setManifest(finalManifest);
-                  }
-                }
-              }
-            } catch (e) {
-              // Skip invalid JSON
-            }
-          }
-        }
-
-        if (finalManifest) {
-          await fetch('/api/report/seed', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ manifest: finalManifest, threadId, resourceId: 'user' }),
-          });
-        }
-      } catch (error) {
-        console.error('Workflow error:', error);
-      }
+      // Trigger the workflow via useChat — prepareSendMessagesRequest injects inputData
+      await workflowSend({ text: "" });
     },
-    [threadId]
+    [store, workflowSend]
   );
 
   const handleSend = useCallback(
@@ -590,24 +372,10 @@ function ReportSession({
     );
   }
 
-  // Derive the report markdown — scan ALL assistant messages for text content
-  // (on reload, the workflow result lands in a separate assistant message with no text parts,
-  //  and the actual report text is in a subsequent assistant message)
-  const reportMarkdown =
-    messages
-      .filter((m) => m.role === "assistant")
-      .flatMap((m) => {
-        const t = getTextFromParts(m);
-        return t.length > 200 ? [t] : [];
-      })[0] ?? null;
-
-  const parsedReport = parseReport(reportMarkdown);
-
-  const showProgress = workflowProgress && !manifest;
+  const showProgress = !!workflowProgress && !manifest;
 
   return (
-    <div className="flex flex-1 overflow-hidden">
-      {/* Center: form (pre-report) or structured report view (post-report) */}
+    <div className="flex flex-1 overflow-hidden flex-row-reverse">
       <AnimatePresence mode="wait">
         {phase === "form" ? (
           <motion.div
@@ -618,7 +386,7 @@ function ReportSession({
             exit={{ opacity: 0, x: -24 }}
             transition={{ duration: 0.3, ease: "easeInOut" }}
           >
-            <BusinessForm onSubmit={handleFormSubmit} isSubmitting={isGenerating || !!workflowProgress} />
+            <BusinessForm onSubmit={handleFormSubmit} isSubmitting={showProgress} />
           </motion.div>
         ) : (
           <motion.div
@@ -641,20 +409,15 @@ function ReportSession({
               </div>
             ) : (
               <ReportView
-                reportData={derived.reportData}
-                progressiveSections={derived.progressiveSections}
-                parsedReport={parsedReport}
-                reportMarkdown={reportMarkdown}
-                isGenerating={isGenerating}
-                businessName={businessName}
                 manifest={manifest ?? undefined}
+                isGenerating={showProgress}
+                businessName={businessName ?? ""}
               />
             )}
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Left sidebar: chat (only visible once report has started) */}
       <AnimatePresence>
         {phase === "chat" && (
           <motion.div
@@ -686,39 +449,30 @@ export default function Home() {
   const [sessionKey, setSessionKey] = useState(0);
   const [isGenerating, setIsGenerating] = useState(false);
   const [hasReport, setHasReport] = useState(false);
+  const store = useReportStore();
 
   const handleNewReport = useCallback(() => {
-    ["cbo-thread-id", "cbo-phase", "cbo-business-name"].forEach((k) =>
-      localStorage.removeItem(k)
-    );
+    store.reset();
     setIsGenerating(false);
     setHasReport(false);
     setSessionKey((k) => k + 1);
-  }, []);
+  }, [store]);
 
-  const handleSelectThread = useCallback((id: string) => {
-    localStorage.setItem("cbo-thread-id", id);
-    localStorage.setItem("cbo-phase", "chat");
-    localStorage.removeItem("cbo-business-name");
+  const handleSelectThread = useCallback((threadId: string) => {
+    store.selectThread(threadId);
     setIsGenerating(false);
     setHasReport(false);
     setSessionKey((k) => k + 1);
-  }, []);
+  }, [store]);
 
   return (
-    // RTL: flex row is right-to-left. DOM order = right → left visually.
-    // 1st child (WorkflowSidebar) → right column
-    // 2nd child (main/ReportSession) → center + left columns
-    <div className="flex h-screen overflow-hidden bg-background">
-      {/* Right sidebar: thread list (first in DOM = right in RTL) */}
+    <div className="flex h-screen overflow-hidden bg-background flex-row-reverse">
       <WorkflowSidebar
         isGenerating={isGenerating}
         onNewReport={handleNewReport}
         onSelectThread={handleSelectThread}
         sessionKey={sessionKey}
       />
-
-      {/* Center + left: report view + chat sidebar */}
       <main className="relative flex flex-1 overflow-hidden">
         <AnimatePresence mode="wait">
           <motion.div

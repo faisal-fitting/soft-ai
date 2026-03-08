@@ -175,7 +175,6 @@ const runSocialAudit = createStep({
     }
 });
 
-
 // ── Phase 1: Strategic Directive ─────────────────────────────────────────────
 
 const generateStrategicDirective = createStep({
@@ -220,7 +219,33 @@ const generateFinancialSection = createStep({
   execute: async ({ inputData, mastra, writer }) => {
     await writer?.write({ type: 'data-step-progress', data: { step: 'financials', status: 'running', message: 'جاري تحليل الوضع المالي...' } });
     const agent = mastra?.getAgent('financialExpertAgent');
-    const prompt = `Generate Financial Section based on directive: ${inputData.directive.theme}\nData: ${JSON.stringify(inputData.items)}`;
+    const threadId = (inputData.base as any)?.threadId;
+    const prompt = `## Context
+You are a financial analyst specializing in Saudi F&B businesses.
+
+## Data Fields (Arabic sample for output labels)
+- netRevenue: الإيرادات الشهرية
+- variableCosts: التكاليف المتغيرة
+- fixedCosts: التكاليف الثابتة
+- grossMargin: هامش الربح الإجمالي
+- netProfit: صافي الربح
+- breakEvenPoint: نقطة التعادل
+
+## Strategic Directive
+${inputData.directive.theme}
+
+## Data to Analyze
+${JSON.stringify(inputData.items, null, 2)}
+
+## Task
+Analyze the financial data and provide actionable insights for the business owner.
+Focus on profitability, break-even analysis, and cost optimization.
+Include visual components that show financial KPIs, cost breakdown, and break-even comparison.
+
+## Output Rules
+- Output ALL text in Arabic
+- Do NOT mix Arabic and English
+- Use Arabic labels from the Data Fields section above`;
     const response = await agent!.generate(prompt, {
       structuredOutput: {
         schema: reportSectionSchema,
@@ -228,6 +253,25 @@ const generateFinancialSection = createStep({
         fallbackValue: { id: 'financials', title: 'Financial Performance', conclusion: { text: 'Financial analysis pending', severity: 'warning' }, visuals: [], narrative: 'Financial data is currently unavailable.' }
       }
     });
+    
+    // Update working memory with human-readable summary
+    if (threadId && agent) {
+      try {
+        const memory = await agent.getMemory(threadId);
+        const result = response.object;
+        const summary = `[الملخص المالي]
+- هامش الربح الإجمالي: ${(inputData.base as any)?.grossMargin?.toFixed(1) ?? 'N/A'}%
+- صافي الربح: ${(inputData.base as any)?.netProfit?.toFixed(0) ?? 'N/A'} ر.س
+- الإيرادات الصافية: ${(inputData.base as any)?.netRevenue?.toFixed(0) ?? 'N/A'} ر.س
+- التكاليف المتغيرة: ${(inputData.base as any)?.variableCosts?.toFixed(0) ?? 'N/A'} ر.س
+- التكاليف الثابتة: ${(inputData.base as any)?.fixedCosts?.toFixed(0) ?? 'N/A'} ر.س
+- حالة الربحية: ${(inputData.base as any)?.isAboveBreakEven ? 'مربح' : 'خاسر'}
+- النتيجة: ${result?.conclusion?.text ?? 'تحليل مالي'}`.slice(0, 1000);
+        
+        await memory?.updateWorkingMemory({ threadId, resource: 'user', workingMemory: summary });
+      } catch { /* ignore memory errors */ }
+    }
+    
     await writer?.write({ type: 'data-step-progress', data: { step: 'financials', status: 'complete', message: 'تم تحليل الوضع المالي' } });
     return response.object;
   },
@@ -241,7 +285,34 @@ const generateDigitalSection = createStep({
   execute: async ({ inputData, mastra, writer }) => {
     await writer?.write({ type: 'data-step-progress', data: { step: 'digital', status: 'running', message: 'جاري تحليل الحضور الرقمي...' } });
     const agent = mastra?.getAgent('digitalExpertAgent');
-    const prompt = `Generate Digital Section. Semantic Analysis: ${JSON.stringify(inputData.semanticAnalysis)}\nSocial Audit: ${JSON.stringify(inputData.socialAudit)}`;
+    const prompt = `## Context
+You are a digital marketing specialist for Saudi F&B businesses.
+
+## Data Fields (Arabic sample for output labels)
+- rating: التقييم
+- reviewCount: عدد التقييمات
+- sentimentScore: درجة المشاعر
+- engagementRate: معدل التفاعل
+- platformBenchmarks: معايير المنصات
+
+## Strategic Directive
+${inputData.directive.theme}
+
+## Semantic Analysis (from Google Reviews)
+${JSON.stringify(inputData.semanticAnalysis, null, 2)}
+
+## Social Media Audit
+${JSON.stringify(inputData.socialAudit, null, 2)}
+
+## Task
+Analyze the digital presence data and provide actionable insights.
+Focus on online reputation, social media performance, and competitive digital positioning.
+Include visual components that show rating metrics, engagement benchmarks, and competitor comparisons.
+
+## Output Rules
+- Output ALL text in Arabic
+- Do NOT mix Arabic and English
+- Use Arabic labels from the Data Fields section above`;
     const response = await agent!.generate(prompt, {
       structuredOutput: {
         schema: reportSectionSchema,
@@ -262,7 +333,30 @@ const generateMarketSection = createStep({
   execute: async ({ inputData, mastra, writer }) => {
     await writer?.write({ type: 'data-step-progress', data: { step: 'market', status: 'running', message: 'جاري تحليل السوق...' } });
     const agent = mastra?.getAgent('marketExpertAgent');
-    const prompt = `Generate Market Section. Competitors: ${JSON.stringify(inputData.nearbyCompetitors.slice(0, 3))}`;
+    const prompt = `## Context
+You are a market research specialist for Saudi F&B businesses.
+
+## Data Fields (Arabic sample for output labels)
+- competitorCount: عدد المنافسين
+- averageRating: متوسط التقييم
+- priceRange: نطاق الأسعار
+- marketSaturation: تشبع السوق
+
+## Strategic Directive
+${inputData.directive.theme}
+
+## Nearby Competitors
+${JSON.stringify(inputData.nearbyCompetitors.slice(0, 5), null, 2)}
+
+## Task
+Analyze the market data and provide competitive insights.
+Focus on competitor positioning, pricing strategies, and market opportunities.
+Include visual components that show competitor metrics, pricing comparison, and market benchmarks.
+
+## Output Rules
+- Output ALL text in Arabic
+- Do NOT mix Arabic and English
+- Use Arabic labels from the Data Fields section above`;
     const response = await agent!.generate(prompt, {
       structuredOutput: {
         schema: reportSectionSchema,
@@ -298,13 +392,31 @@ const generateActionPlanSection = createStep({
 
     const threadId = (inputData.base as any).threadId || `studio-${Date.now()}`;
     
-    const prompt = `Synthesize Action Plan:
-Directive: ${JSON.stringify((inputData.base as any).directive)}
-Financial Section: ${JSON.stringify(inputData.financials)}
-Digital Section: ${JSON.stringify(inputData.digital)}
-Market Section: ${JSON.stringify(inputData.market)}`;
+    const prompt = `## Mode 2: Action Plan Synthesis
+    
+Synthesize the following expert reports into a unified Action Plan.
+
+### Strategic Directive
+${JSON.stringify((inputData.base as any).directive)}
+
+### Financial Section
+${JSON.stringify(inputData.financials)}
+
+### Digital Section
+${JSON.stringify(inputData.digital)}
+
+### Market Section
+${JSON.stringify(inputData.market)}
+
+Follow the Action Plan Synthesis instructions from your system prompt. Output a JSON object with:
+- id: "action-plan"
+- title: "خطة العمل" (Action Plan in Arabic)
+- conclusion: Overall priority
+- tacticalMoves: TOP 5-7 prioritized moves with timeline
+- narrative: Strategic roadmap`;
     
     const response = await agent.generate(prompt, {
+      model: 'openrouter/google/gemini-2.5-flash',
       memory: { thread: threadId, resource: 'user' },
       structuredOutput: {
         schema: reportSectionSchema,
@@ -411,35 +523,7 @@ const localizeManifest = createStep({
     }
 });
 
-const assembleManifest = createStep({
-  id: 'assemble-manifest',
-  description: 'Merge all sections into the final dashboard manifest',
-  inputSchema: z.object({
-    base: expertInputSchema,
-    financials: reportSectionSchema,
-    digital: reportSectionSchema,
-    market: reportSectionSchema,
-    actionPlan: reportSectionSchema,
-  }),
-  outputSchema: reportManifestSchema,
-  execute: async ({ inputData }) => {
-    return {
-      metadata: {
-        businessName: inputData.base.businessName,
-        businessType: inputData.base.businessType,
-        generatedAt: new Date().toISOString(),
-        healthScore: inputData.base.healthScore,
-      },
-      directive: inputData.base.directive,
-      sections: [
-        inputData.financials,
-        inputData.digital,
-        inputData.market,
-        inputData.actionPlan,
-      ],
-    };
-  },
-});
+
 
 // ── Workflow Definition ───────────────────────────────────────────────────────
 
@@ -468,7 +552,10 @@ export const businessAnalysisWorkflow = createWorkflow({
     const semanticResult = getStepResult('run-semantic-analysis');
     const socialResult = getStepResult('run-social-audit');
     const directive = inputData;
-    const healthScore = Math.round((base.grossMargin * 0.4) + (base.placeDetails.rating! * 10 * 0.6));
+    
+    // Cap grossMargin between -50 and +50 to prevent extreme health scores
+    const cappedMargin = Math.max(-50, Math.min(50, base.grossMargin));
+    const healthScore = Math.round((cappedMargin * 0.4) + (base.placeDetails.rating! * 10 * 0.6));
     return {
       ...base,
       semanticAnalysis: semanticResult,
@@ -493,11 +580,21 @@ export const businessAnalysisWorkflow = createWorkflow({
     const expertOutput = getStepResult<any>('expert-aggregator');
     const actionPlan = inputData;
     return {
-      ...expertOutput,
-      actionPlan,
+      metadata: {
+        businessName: expertOutput.base.businessName,
+        businessType: expertOutput.base.businessType,
+        generatedAt: new Date().toISOString(),
+        healthScore: expertOutput.base.healthScore,
+      },
+      directive: expertOutput.base.directive,
+      sections: [
+        expertOutput.financials,
+        expertOutput.digital,
+        expertOutput.market,
+        actionPlan,
+      ],
     };
-  }, { id: 'prepare-manifest' })
-  .then(assembleManifest)
+  }, { id: 'assemble-manifest' })
   .then(localizeManifest);
 
 businessAnalysisWorkflow.commit();

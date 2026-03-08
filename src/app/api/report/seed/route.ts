@@ -6,7 +6,16 @@ export const maxDuration = 300;
 export async function POST(req: Request) {
   const { manifest, threadId, resourceId } = await req.json();
 
-  const validatedManifest = reportManifestSchema.parse(manifest);
+  console.log('[seed] received manifest keys:', Object.keys(manifest ?? {}));
+  console.log('[seed] manifest sample:', JSON.stringify(manifest).slice(0, 500));
+
+  let validatedManifest;
+  try {
+    validatedManifest = reportManifestSchema.parse(manifest);
+  } catch (err) {
+    console.error('[seed] validation failed:', err);
+    return Response.json({ error: 'Invalid manifest', details: String(err) }, { status: 400 });
+  }
 
   const cboAgent = mastra.getAgent('cboAgent');
   if (!cboAgent) {

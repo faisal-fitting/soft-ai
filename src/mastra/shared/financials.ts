@@ -6,9 +6,10 @@ export const itemInputSchema = z.object({
   name: z.string(),
   sellingPrice: z.number(),
   soldUnits: z.number(),
-  rawMaterialCostPerUnit: z.number().describe('تكلفة المواد الخام للوحدة'),
-  packagingCostPerUnit: z.number().describe('تكلفة التغليف للوحدة'),
-  dailyProductionCapacity: z.number().describe('السعة الإنتاجية اليومية للمنتج'),
+  rawMaterialCostPerUnit: z.number().optional().describe('تكلفة المواد الخام للوحدة'),
+  packagingCostPerUnit: z.number().optional().describe('تكلفة التغليف للوحدة'),
+  totalCostPerUnit: z.number().optional().describe('التكلفة الإجمالية للوحدة (إذا لم تكن مفصلة)'),
+  dailyProductionCapacity: z.number().optional().describe('السعة الإنتاجية اليومية للمنتج'),
 });
 
 const itemOutputSchema = z.object({
@@ -22,6 +23,7 @@ const itemOutputSchema = z.object({
   // Per-product costs
   rawMaterialCostPerUnit: z.number(),
   packagingCostPerUnit: z.number(),
+  totalCostPerUnit: z.number().optional(), // Original input (if using total mode)
   manufacturingCostPerUnit: z.number(),
   variableCostPerUnit: z.number(),
   fixedCostAllocationPerUnit: z.number(),
@@ -131,8 +133,15 @@ export function computeFinancials(input: FinancialInput): FinancialOutput {
   } = input;
 
   // Step 1: Derive aggregates from items
-  const rawMaterials = items.reduce((sum, i) => sum + i.rawMaterialCostPerUnit * i.soldUnits, 0);
-  const packaging = items.reduce((sum, i) => sum + i.packagingCostPerUnit * i.soldUnits, 0);
+  // If totalCostPerUnit is provided, use it; otherwise use rawMaterialCostPerUnit + packagingCostPerUnit
+  const rawMaterials = items.reduce((sum, i) => {
+    const unitCost = i.totalCostPerUnit ?? i.rawMaterialCostPerUnit ?? 0;
+    return sum + unitCost * i.soldUnits;
+  }, 0);
+  const packaging = items.reduce((sum, i) => {
+    if (i.totalCostPerUnit !== undefined) return sum; // already included in total
+    return sum + (i.packagingCostPerUnit ?? 0) * i.soldUnits;
+  }, 0);
 
   // Step 2: Compute costs
   const variableCosts = rawMaterials + packaging + productionStaffCosts;
@@ -156,7 +165,7 @@ export function computeFinancials(input: FinancialInput): FinancialOutput {
 
   // Step 4: Per-product calculations
   const totalMonthlyCapacity = items.reduce(
-    (sum, i) => sum + i.dailyProductionCapacity * 30, 0,
+    (sum, i) => sum + (i.dailyProductionCapacity ?? 0) * 30, 0,
   );
   const manufacturingCostPerUnit =
     totalMonthlyCapacity > 0 ? productionStaffCosts / totalMonthlyCapacity : 0;
@@ -174,8 +183,10 @@ export function computeFinancials(input: FinancialInput): FinancialOutput {
     const revenueShare =
       totalItemRevenue !== 0 ? (totalRevenue / totalItemRevenue) * 100 : 0;
 
-    const variableCostPerUnit =
-      item.rawMaterialCostPerUnit + item.packagingCostPerUnit + manufacturingCostPerUnit;
+    // Use totalCostPerUnit if provided, otherwise sum rawMaterial + packaging
+    const itemRawMaterial = item.rawMaterialCostPerUnit ?? 0;
+    const itemPackaging = item.totalCostPerUnit !== undefined ? 0 : (item.packagingCostPerUnit ?? 0);
+    const variableCostPerUnit = itemRawMaterial + itemPackaging + manufacturingCostPerUnit;
     const fixedCostAllocationPerUnit =
       item.soldUnits > 0 ? fixedCostPerProduct / item.soldUnits : 0;
     const fullCostPerUnit = variableCostPerUnit + fixedCostAllocationPerUnit;
@@ -186,8 +197,8 @@ export function computeFinancials(input: FinancialInput): FinancialOutput {
         ? fixedCostPerProduct / contributionMarginPerUnit
         : Number.MAX_SAFE_INTEGER;
     const capacityUtilizationPercent =
-      item.dailyProductionCapacity > 0
-        ? (item.soldUnits / (item.dailyProductionCapacity * 30)) * 100
+      (item.dailyProductionCapacity ?? 0) > 0
+        ? (item.soldUnits / ((item.dailyProductionCapacity ?? 0) * 30)) * 100
         : 0;
     const isBelowCost = item.sellingPrice < variableCostPerUnit;
     const lossPerUnit = Math.max(0, variableCostPerUnit - item.sellingPrice);
@@ -198,8 +209,9 @@ export function computeFinancials(input: FinancialInput): FinancialOutput {
       soldUnits: item.soldUnits,
       totalRevenue,
       revenueShare,
-      rawMaterialCostPerUnit: item.rawMaterialCostPerUnit,
-      packagingCostPerUnit: item.packagingCostPerUnit,
+      rawMaterialCostPerUnit: itemRawMaterial,
+      packagingCostPerUnit: itemPackaging,
+      totalCostPerUnit: item.totalCostPerUnit,
       manufacturingCostPerUnit,
       variableCostPerUnit,
       fixedCostAllocationPerUnit,

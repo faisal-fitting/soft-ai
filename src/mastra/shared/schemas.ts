@@ -218,6 +218,7 @@ export const reportSectionSchema = z.object({
   }),
   visuals: z.array(reportVisualSchema),
   narrative: z.string().describe('Detailed Markdown explanation with citations'),
+  citations: z.array(z.string()).optional(),
   tacticalMoves: z.array(z.object({
     action: z.string(),
     impact: z.enum(['high', 'medium', 'low']),
