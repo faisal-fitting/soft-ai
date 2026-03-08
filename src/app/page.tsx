@@ -38,6 +38,35 @@ import { Suggestions, Suggestion } from "@/components/ai-elements/suggestion";
 type WorkflowStep = { name: string; status: string; output?: unknown };
 type WorkflowData = { name: string; status: string; steps: Record<string, WorkflowStep> };
 
+export type StepProgress = {
+  step: string;
+  status: 'running' | 'complete';
+  message: string;
+};
+
+export type ReportManifest = {
+  metadata: {
+    businessName: string;
+    businessType: string;
+    generatedAt: string;
+    healthScore: number;
+  };
+  directive: {
+    theme: string;
+    northStarMetric: { name: string; value: number; target: number; rationale: string };
+    focusAreas: { financial: string; digital: string; market: string };
+    overallStatus: 'CRITICAL' | 'WARNING' | 'HEALTHY' | 'EXCEPTIONAL';
+  };
+  sections: Array<{
+    id: string;
+    title: string;
+    conclusion: { text: string; severity: 'success' | 'warning' | 'critical' };
+    visuals: Array<any>;
+    narrative: string;
+    tacticalMoves?: Array<{ action: string; impact: 'high' | 'medium' | 'low'; deadline: string }>;
+  }>;
+};
+
 /** Structured data from the workflow's compose-report step output */
 export type ReportData = {
   businessName: string;
@@ -415,6 +444,9 @@ function ReportSession({
       : ""
   );
 
+  const [workflowProgress, setWorkflowProgress] = useState<StepProgress | null>(null);
+  const [manifest, setManifest] = useState<ReportManifest | null>(null);
+
   const [loadingHistory, setLoadingHistory] = useState(
     typeof window !== "undefined" && localStorage.getItem("cbo-phase") === "chat"
   );
@@ -478,9 +510,69 @@ function ReportSession({
       setBusinessName(data.businessName);
       setPhase("chat");
       saveThreadTitle(threadId, data.businessName).catch(console.error);
-      await sendMessage({ text: buildReportPrompt(data) });
+
+      try {
+        const response = await fetch('/api/report/stream', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ inputData: data, threadId }),
+        });
+
+        if (!response.ok || !response.body) {
+          throw new Error('Failed to start workflow');
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let finalManifest: ReportManifest | null = null;
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            if (!line.trim() || !line.startsWith('data:')) continue;
+            try {
+              const json = JSON.parse(line.slice(5));
+              
+              if (json.type === 'data-step-progress') {
+                setWorkflowProgress(json.data);
+              } else if (json.type === 'data-workflow') {
+                const workflowData = json.data as WorkflowData;
+                if (workflowData.status === 'success' && workflowData.steps) {
+                  const steps = workflowData.steps as Record<string, { output?: any }>;
+                  const finalStep = Object.values(steps).find(
+                    (s) => s.output && s.output.metadata
+                  );
+                  if (finalStep?.output) {
+                    finalManifest = finalStep.output as ReportManifest;
+                    setManifest(finalManifest);
+                  }
+                }
+              }
+            } catch (e) {
+              // Skip invalid JSON
+            }
+          }
+        }
+
+        if (finalManifest) {
+          await fetch('/api/report/seed', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ manifest: finalManifest, threadId, resourceId: 'user' }),
+          });
+        }
+      } catch (error) {
+        console.error('Workflow error:', error);
+      }
     },
-    [sendMessage, threadId]
+    [threadId]
   );
 
   const handleSend = useCallback(
@@ -511,6 +603,8 @@ function ReportSession({
 
   const parsedReport = parseReport(reportMarkdown);
 
+  const showProgress = workflowProgress && !manifest;
+
   return (
     <div className="flex flex-1 overflow-hidden">
       {/* Center: form (pre-report) or structured report view (post-report) */}
@@ -524,7 +618,7 @@ function ReportSession({
             exit={{ opacity: 0, x: -24 }}
             transition={{ duration: 0.3, ease: "easeInOut" }}
           >
-            <BusinessForm onSubmit={handleFormSubmit} isSubmitting={isGenerating} />
+            <BusinessForm onSubmit={handleFormSubmit} isSubmitting={isGenerating || !!workflowProgress} />
           </motion.div>
         ) : (
           <motion.div
@@ -535,14 +629,27 @@ function ReportSession({
             exit={{ opacity: 0 }}
             transition={{ duration: 0.3 }}
           >
-            <ReportView
-              reportData={derived.reportData}
-              progressiveSections={derived.progressiveSections}
-              parsedReport={parsedReport}
-              reportMarkdown={reportMarkdown}
-              isGenerating={isGenerating}
-              businessName={businessName}
-            />
+            {showProgress ? (
+              <div className="flex flex-1 flex-col items-center justify-center p-8">
+                <div className="mb-6 flex size-16 items-center justify-center rounded-full border-2 border-primary/20 bg-primary/5">
+                  <Loader2 className="size-8 animate-spin text-primary" />
+                </div>
+                <h2 className="mb-2 text-xl font-bold text-foreground">
+                  جاري تحليل {businessName}
+                </h2>
+                <p className="text-sm text-muted-foreground">{workflowProgress?.message}</p>
+              </div>
+            ) : (
+              <ReportView
+                reportData={derived.reportData}
+                progressiveSections={derived.progressiveSections}
+                parsedReport={parsedReport}
+                reportMarkdown={reportMarkdown}
+                isGenerating={isGenerating}
+                businessName={businessName}
+                manifest={manifest ?? undefined}
+              />
+            )}
           </motion.div>
         )}
       </AnimatePresence>

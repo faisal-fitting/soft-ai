@@ -3,9 +3,7 @@ import { z } from 'zod';
 import { getJson } from 'serpapi';
 import { reviewSchema, reviewsResponseSchema } from '../shared/schemas';
 
-const SERPAPI_KEY =
-  process.env.SERPAPI_API_KEY ||
-  '7f5198da5c7782aae6f6a4a435749983ce94837843fff895abd964b9db31c492';
+const SERPAPI_KEY = process.env.SERPAPI_API_KEY || '7f5198da5c7782aae6f6a4a435749983ce94837843fff895abd964b9db31c492';
 
 /**
  * Review sample size decision (40 reviews = 4 pages × ~10/page):
@@ -17,6 +15,7 @@ const SERPAPI_KEY =
  *   - 'qualityScore' → recommended for competitors (most representative sample)
  *   - 'ratingLow'    → optional deep-dive to surface critical failure patterns
  */
+
 const MAX_REVIEW_PAGES = 4;
 
 export const googleMapsReviewsTool = createTool({

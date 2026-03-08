@@ -10,10 +10,10 @@ export const businessAnalysisTool = createTool({
     'Requires complete financial data, a Google Places placeId, and optional social handles. ' +
     'Returns a comprehensive Arabic business health report.',
   inputSchema: financialInputSchema,
-  outputSchema: z.object({ report: z.string() }),
+  outputSchema: z.any(),
   execute: async (inputData) => {
     const run = await businessAnalysisWorkflow.createRun();
     const result = await run.start({ inputData });
-    return { report: result.status == "success" ? result?.result?.report : 'Report generation failed.' };
+    return result.status === "success" ? result?.result : null;
   },
 });

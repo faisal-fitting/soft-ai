@@ -27,7 +27,11 @@
       "Bash(npx tsc:*)",
       "WebFetch(domain:ui.shadcn.com)",
       "mcp__deepwiki__read_wiki_structure",
-      "Bash(npx shadcn@latest:*)"
+      "Bash(npx shadcn@latest:*)",
+      "WebFetch(domain:www.answeroverflow.com)",
+      "Bash(pnpm list:*)",
+      "Bash(gh search:*)",
+      "Bash(npm view:*)"
     ]
   }
 }

@@ -154,3 +154,100 @@ export const competitorAnalysisSchema = z.object({
   place_id: z.string(),
   analysis: z.string(),
 });
+
+// ── Feature Extractor Schemas (For Supporting Agents) ──────────────────────
+
+export const semanticAnalysisOutputSchema = z.object({
+  sentimentScore: z.number().min(0).max(100),
+  themes: z.array(z.object({
+    topic: z.string(),
+    sentiment: z.enum(['positive', 'negative', 'neutral']),
+    mentions: z.number(),
+    exampleSnippets: z.array(z.string()),
+  })),
+  criticalWeakness: z.string().optional(),
+});
+
+export const socialAuditOutputSchema = z.object({
+  healthScore: z.number().min(1).max(10),
+  platformBenchmarks: z.array(z.object({
+    platform: z.enum(['instagram', 'tiktok']),
+    status: z.enum(['above-benchmark', 'at-benchmark', 'below-benchmark']),
+    engagementRate: z.number(),
+    benchmark: z.number(),
+  })),
+  contentStrategyGap: z.string(),
+  viralitySignals: z.object({
+    shareToImpressionRatio: z.number(),
+    growthPotential: z.enum(['high', 'medium', 'low']),
+  }),
+});
+
+// ── Structured Dashboard Schemas (The "Mastra Way") ──────────────────────────
+
+export const visualTypeSchema = z.enum([
+  'bar-chart',
+  'line-chart',
+  'pie-chart',
+  'metric-grid',
+  'table',
+  'radar-chart',
+]);
+
+export const chartDataPointSchema = z.object({
+  label: z.string(),
+  value: z.number(),
+  comparisonValue: z.number().optional(),
+  category: z.string().optional(),
+});
+
+export const reportVisualSchema = z.object({
+  type: visualTypeSchema,
+  title: z.string(),
+  description: z.string(),
+  data: z.array(chartDataPointSchema),
+  config: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).optional(),
+});
+
+export const reportSectionSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  conclusion: z.object({
+    text: z.string(),
+    severity: z.enum(['success', 'warning', 'critical']),
+  }),
+  visuals: z.array(reportVisualSchema),
+  narrative: z.string().describe('Detailed Markdown explanation with citations'),
+  tacticalMoves: z.array(z.object({
+    action: z.string(),
+    impact: z.enum(['high', 'medium', 'low']),
+    deadline: z.string(),
+  })).optional(),
+});
+
+export const strategicDirectiveSchema = z.object({
+  theme: z.string(),
+  northStarMetric: z.object({
+    name: z.string(),
+    value: z.number(),
+    target: z.number(),
+    rationale: z.string(),
+  }),
+  focusAreas: z.object({
+    financial: z.string(),
+    digital: z.string(),
+    market: z.string(),
+  }),
+  overallStatus: z.enum(['CRITICAL', 'WARNING', 'HEALTHY', 'EXCEPTIONAL']),
+});
+
+export const reportManifestSchema = z.object({
+  metadata: z.object({
+    businessName: z.string(),
+    businessType: z.string(),
+    generatedAt: z.string(),
+    healthScore: z.number(),
+  }),
+  directive: strategicDirectiveSchema,
+  sections: z.array(reportSectionSchema),
+});

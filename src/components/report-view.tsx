@@ -922,6 +922,7 @@ export function ReportView({
   reportMarkdown,
   isGenerating,
   businessName,
+  manifest,
 }: {
   reportData: ReportData | null;
   progressiveSections: ProgressiveSections;
@@ -929,6 +930,11 @@ export function ReportView({
   reportMarkdown: string | null;
   isGenerating: boolean;
   businessName: string;
+  manifest?: {
+    metadata: { businessName: string; businessType: string; generatedAt: string; healthScore: number };
+    directive: { theme: string; northStarMetric: { name: string; value: number; target: number; rationale: string }; focusAreas: { financial: string; digital: string; market: string }; overallStatus: string };
+    sections: Array<{ id: string; title: string; conclusion: { text: string; severity: string }; visuals: any[]; narrative: string; tacticalMoves?: Array<{ action: string; impact: string; deadline: string }> }>;
+  };
 }) {
   const { sections } = parsedReport;
 
