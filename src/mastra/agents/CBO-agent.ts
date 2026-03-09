@@ -97,7 +97,7 @@ export const cboAgent = new Agent({
     
     FORBIDDEN: LaTeX/KaTeX notation. Use plain Arabic text for all equations.
   `,
-  model: 'openrouter/google/gemini-2.5-flash',
+  model: 'openrouter/anthropic/claude-opus-4.6',
   defaultOptions: {
     modelSettings: {
       maxOutputTokens: 64000,

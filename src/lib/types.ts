@@ -45,6 +45,9 @@ export type ReportManifest = {
     generatedAt: string;
     healthScore: number;
     photoUrl?: string;
+    address?: string;
+    rating?: number;
+    reviewCount?: number;
   };
   directive: {
     theme: string;

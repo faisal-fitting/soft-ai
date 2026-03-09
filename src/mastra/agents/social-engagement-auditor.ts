@@ -1,5 +1,4 @@
 import { Agent } from '@mastra/core/agent';
-import { socialAuditOutputSchema } from '../shared/schemas';
 
 export const socialEngagementAuditor = new Agent({
   id: 'social-engagement-auditor',
@@ -21,5 +20,5 @@ export const socialEngagementAuditor = new Agent({
     **Output:**
     Your output MUST be a JSON object adhering to the provided schema.
   `,
-  model: 'openrouter/google/gemini-2.5-flash',
+  model: 'openrouter/google/gemini-2.5-pro',
 });

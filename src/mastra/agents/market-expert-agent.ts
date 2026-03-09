@@ -37,6 +37,6 @@ export const marketExpertAgent = new Agent({
     **Output:**
     Your output must be a single JSON object adhering to the reportSectionSchema.
   `,
-  model: 'openrouter/google/gemini-2.5-flash',
+  model: 'openrouter/google/gemini-2.5-pro',
   tools: { webSearchTool },
 });

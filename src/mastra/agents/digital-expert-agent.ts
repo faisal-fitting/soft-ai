@@ -26,12 +26,6 @@ export const digitalExpertAgent = new Agent({
     - Review Response Time Target: <24 hours
     - Share to Impression Ratio: 1%+ indicates viral potential
 
-    **Required: Business Strengths & Weaknesses (SWOT snippet)**
-    In your narrative, include a ## Strengths & Weaknesses subsection:
-    - **Strengths:** 2-3 digital/reputation strengths (e.g., high sentiment score, active Instagram)
-    - **Weaknesses:** 2-3 digital/reputation weaknesses (e.g., no TikTok presence, critical service complaints)
-    Base this on the semantic analysis and social audit data provided.
-
     **Required: Highlight Top Performing Content**
     If topPerformingContent is present in the social audit data, include a ## Top Performing Content subsection in your narrative:
     - For each top piece of content, mention: platform, content type, engagement score, why it worked
@@ -47,5 +41,5 @@ export const digitalExpertAgent = new Agent({
     **Output:**
     Your output must be a single JSON object adhering to the reportSectionSchema.
   `,
-  model: 'openrouter/google/gemini-2.5-flash',
+  model: 'openrouter/google/gemini-2.5-pro',
 });

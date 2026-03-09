@@ -258,7 +258,7 @@ export const reportSectionSchema = z.object({
     severity: z.enum(['success', 'warning', 'critical']).describe('Traffic-light severity: success=healthy, warning=needs attention, critical=urgent action required'),
   }).describe('Section conclusion with severity indicator'),
   visuals: z.array(reportVisualSchema).describe('2-3 charts or grids that visually prove the conclusion'),
-  narrative: z.string().describe('Detailed Markdown narrative (use ## headers, bullet points, bold for key numbers). Must include: strengths, weaknesses, analysis, and recommendations. All text in English (will be translated).'),
+  narrative: z.string().describe('Detailed Markdown narrative (use ## headers, bullet points, bold for key numbers). Must include: analysis and key findings. All text in English (will be translated).'),
   citations: z.array(z.string()).optional().describe('Source URLs or references used in the analysis'),
   tacticalMoves: z.array(z.object({
     action: z.string().describe('Markdown action description — specific, measurable, data-backed'),
@@ -290,6 +290,9 @@ export const reportManifestSchema = z.object({
     generatedAt: z.string(),
     healthScore: z.number(),
     photoUrl: z.string().optional(),
+    address: z.string().optional(),
+    rating: z.number().optional(),
+    reviewCount: z.number().optional(),
   }),
   directive: strategicDirectiveSchema,
   sections: z.array(reportSectionSchema),

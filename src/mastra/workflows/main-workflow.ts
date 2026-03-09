@@ -296,6 +296,11 @@ ${toYaml(inputData.items)}
 Analyze the financial data and provide actionable insights.
 IMPORTANT: Use the pre-computed KPIs exactly as provided in your metric-grid visuals.
 Do NOT recalculate totals from per-product data.
+
+**Visual Requirements:**
+- For "top products by revenue" visualization: Use type "table" NOT "bar-chart". Include columns: المنتج، الإيرادات، هامش الربح، التصنيف (نجم/حصان/كلب/لغز)
+- Keep bar-chart only for simple comparisons (2-3 items max)
+
 Focus on profitability, break-even analysis, cost optimization, and menu engineering.`;
     const response = await agent!.generate(prompt, {
       structuredOutput: {
@@ -448,61 +453,68 @@ const generateActionPlanSection = createStep({
 
     const threadId = (inputData.base as any).threadId || `studio-${Date.now()}`;
     
-    const prompt = `## Mode 2: Action Plan Synthesis
+    const prompt = `## Action Plan Synthesis
 
-You are the CEO. Synthesize the three expert reports below into a single, unified, phased Action Plan.
+You are the CEO. Create a unified, phased Action Plan for the business owner.
 
-### Strategic Directive
+## Overall Goal (North Star)
 ${toYaml((inputData.base as any).directive)}
 
-### Financial Section
+## Input Analysis
+### Financial Data
 ${toYaml(inputData.financials)}
 
-### Digital Section
+### Digital/Social Data  
 ${toYaml(inputData.digital)}
 
-### Market Section
+### Market/Competitor Data
 ${toYaml(inputData.market)}
 
-### Required Output Structure
+## Required Output Format
 
-**narrative** (Markdown): Write a 3-phase execution roadmap. Each phase must have:
-- A clear **goal** (what success looks like)
-- **2-3 specific steps** (concrete, measurable actions)
-- **Why** this phase comes before the next
+**IMPORTANT: Follow this exact structure:**
 
-Use this structure:
-## Phase 1: Immediate Actions (Week 1)
-**Goal:** [one-sentence goal]
-- Step 1: [specific action with metric]
-- Step 2: [specific action with metric]
+## Goal
+[One sentence: The overall business objective]
+Example: Increase CSAT from 68 to 85, translating to +20% customer retention and +15% revenue
 
-## Phase 2: Short-Term Improvements (Weeks 2-4)
-**Goal:** [one-sentence goal]
-- Step 1: ...
+## Phase 1: [Timeframe]
+**Target Goal:** +[X] SAR revenue (e.g., +30,000 SAR/month)
+**Steps:**
+1. **Prepare Tools:** [Internal - hire staff, inventory, setup systems]
+2. **Execute:** [External - advertise, based on [specific finding from analysis]]
+[Additional steps as needed]
 
-## Phase 3: Growth Initiatives (Months 2-3)
-**Goal:** [one-sentence goal]
-- Step 1: ...
+## Phase 2: [Timeframe]  
+**Target Goal:** +[X] SAR revenue
+**Steps:**
+1. **Prepare Tools:** [Internal preparations]
+2. **Execute:** [Based on [specific finding from analysis]]
+[Additional steps as needed]
 
-**tacticalMoves**: Select the TOP 5-7 highest-impact moves across all three sections.
-Each move action should include the phase context, e.g. "[Phase 1] Raise Latte price by 2 SAR..."
-Rank by: impact (high > medium > low), then speed (quick wins first).
+## Phase 3: [Timeframe]
+**Target Goal:** [Final milestone]
+**Steps:**
+1. **Prepare Tools:** [Internal]
+2. **Execute:** [Based on analysis]
 
-**IMPORTANT: If the North Star metric is related to service quality, customer satisfaction,
-or operational efficiency (e.g., CSAT, service speed), you MUST add 1-2 operational
-improvement moves even if they don't appear in the expert sections.**
+## Rules:
+1. **Internal before External:** All "prepare tools" steps (hiring, inventory, systems) MUST come BEFORE advertising/marketing steps
+2. **Link to Analysis:** Every execution step must reference a specific finding from the input data
+   - Example: "Launch Instagram ads featuring our cold brew (top performer per Digital Analysis)"
+   - Example: "Address competitor X's weak pricing on lattes by offering promotions"
+3. **Measurable:** Each step should have a metric or target
+4. **Maximum 7 total steps** across all phases
 
-Examples of operational moves:
-- Hire or redistribute staff during peak hours
-- Implement queue management or pre-order system
-- Optimize workstation layout or workflow
-- Add automation (POS, online ordering)
-
-**conclusion**: Overall execution urgency (critical/warning/success) based on the north star metric gap.`;
+## tacticalMoves Format:
+List 5-7 top actions. Each must include:
+- Phase reference: "[Phase 1]", "[Phase 2]", "[Phase 3]"
+- Specific action with metric
+- Source: "From Financial/Digital/Market analysis"
+`;
     
     const response = await agent.generate(prompt, {
-      prepareStep: () => ({ model: 'openrouter/google/gemini-2.5-flash' }),
+      prepareStep: () => ({ model: 'openrouter/google/gemini-3.1-pro-preview' }),
       memory: { thread: threadId, resource: 'user' },
       structuredOutput: {
         schema: reportSectionSchema,
@@ -573,13 +585,15 @@ const localizeManifest = createStep({
 
         // 2. Call translation agent with Saudi tone guidance
         const tonePrompt = `
-أنت خبير تحليل أعمال ومستشار مالي مختص بسوق المقاهي في الرياض.
-استخدم لهجة سعودية محلية ودية واحترافية.
+أنت كاتب محتوى عربي متخصص في التقارير المالية والتسويقية للمطاعم والمقاهي في السعودية.
+هدفك هو جعل النص翻译 يبدو وكأنه كتبه محلل أعمال سعودي محترف - ودّي، قريب من الواقع، واحترافي.
 
-ترجم النصوص التالية إلى العربية الفصحى بم لهجة سعودية محلية:
-- استخدم مصطلحات مالية وتسويقية عربية صحيحة
-- حافظ على الأرقام والنسب المئوية كما هي
-- تجنب اللغة الصناعية أو الآلية
+قواعد مهمة جداً:
+1. **الأرقام**: استخدم الأرقام الإنجليزية (1,234.56) وليس العربية (١٬٢٣٤٫٥٦). لا تترجم الأرقام مطلقاً.
+2. **الرموز**: أضف رموز العملة والنسبة مباشرة بعد الرقم (مثل: 1,234 ر.س أو 25%)
+3. **المصطلحات**: استخدم المصطلحات الشائعة في السوق السعودي (ريال، نسبة، هامش، إلخ)
+4. **التنسيق**: اجعل الجمل قصيرة ومباشرة. تجنب الترجمة الحرفية.
+5. **النبرة**: كأنك تكتب لصاحب café صغير - واضح، عملي، ومتفهم.
 
 النصوص المراد ترجمتها:
 ${toYaml({ texts: stringsToTranslate })}`;
@@ -642,16 +656,20 @@ export const businessAnalysisWorkflow = createWorkflow({
 })
   .then(collectFinancials)
   .then(fetchPlaceDetails)
-  .parallel([fetchTargetReviews, fetchNearbyCompetitors, fetchSocialData, fetchCompetitorReviews])
+  .parallel([fetchTargetReviews, fetchNearbyCompetitors, fetchSocialData])
+  .then(fetchCompetitorReviews)
   .map(async ({ inputData, getStepResult }) => {
     const base = getStepResult<z.infer<typeof placeEnrichedSchema>>('fetch-place-details');
-    const parallel = inputData;
+    const reviews = getStepResult<{ reviews: z.infer<typeof reviewsResponseSchema> }>('fetch-target-reviews');
+    const nearby = getStepResult<{ nearbyCompetitors: z.infer<typeof nearbyPlaceSchema>[] }>('fetch-nearby-competitors');
+    const social = getStepResult<{ socialData: any }>('fetch-social-data');
+    const competitorReviews = getStepResult<{ competitorReviews: z.infer<typeof competitorReviewSummarySchema>[] }>('fetch-competitor-reviews');
     return { 
         ...base, 
-        reviews: parallel['fetch-target-reviews']?.reviews, 
-        nearbyCompetitors: parallel['fetch-nearby-competitors']?.nearbyCompetitors,
-        socialData: parallel['fetch-social-data']?.socialData,
-        competitorReviews: parallel['fetch-competitor-reviews']?.competitorReviews ?? [],
+        reviews: reviews?.reviews, 
+        nearbyCompetitors: nearby?.nearbyCompetitors,
+        socialData: social?.socialData,
+        competitorReviews: competitorReviews?.competitorReviews ?? [],
     };
   }, { id: 'merge-external-data' })
   .parallel([runSemanticAnalysis, runSocialAudit])
@@ -697,6 +715,9 @@ export const businessAnalysisWorkflow = createWorkflow({
         photoUrl: expertOutput.base.placeDetails?.photos?.[0]?.name
           ? `https://places.googleapis.com/v1/${expertOutput.base.placeDetails.photos[0].name}/media?maxHeightPx=400&key=${process.env.GOOGLE_PLACES_API_KEY || 'AIzaSyAgbQvK5FZC_2liZ9mM6a7-HJSz8lC4CoQ'}`
           : undefined,
+        address: expertOutput.base.placeDetails?.formattedAddress,
+        rating: expertOutput.base.placeDetails?.rating,
+        reviewCount: expertOutput.base.placeDetails?.userRatingCount,
       },
       directive: expertOutput.base.directive,
       sections: [

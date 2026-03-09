@@ -1,5 +1,4 @@
 import { Agent } from '@mastra/core/agent';
-import { semanticAnalysisOutputSchema } from '../shared/schemas';
 
 export const semanticAnalysisAgent = new Agent({
   id: 'semantic-analysis-agent',
@@ -19,5 +18,5 @@ export const semanticAnalysisAgent = new Agent({
     **Output:**
     Your output MUST be a JSON object that adheres to the provided schema.
   `,
-  model: 'openrouter/google/gemini-2.5-flash',
+  model: 'openrouter/google/gemini-2.5-pro',
 });

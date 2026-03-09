@@ -65,10 +65,27 @@ export function BusinessSidebar({ manifest, isGenerating, onNewReport }: Props) 
                   <Badge className={statusCfg.cls}>{statusCfg.label}</Badge>
                 )}
               </div>
-              <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                <MapPin className="size-3 shrink-0" />
-                <span>{meta.businessType}</span>
-              </div>
+              {meta.address && (
+                <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                  <MapPin className="size-3 shrink-0" />
+                  <span className="line-clamp-2">{meta.address}</span>
+                </div>
+              )}
+              {(meta.rating != null || meta.reviewCount != null) && (
+                <div className="flex items-center gap-2 text-xs">
+                  {meta.rating != null && (
+                    <span className="flex items-center gap-0.5 font-medium">
+                      <Star className="size-3 fill-yellow-500 text-yellow-500" />
+                      {meta.rating.toFixed(1)}
+                    </span>
+                  )}
+                  {meta.reviewCount != null && (
+                    <span className="text-muted-foreground">
+                      ({meta.reviewCount.toLocaleString()} تقييم)
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Health Score */}
@@ -76,7 +93,7 @@ export function BusinessSidebar({ manifest, isGenerating, onNewReport }: Props) 
               <div className="mb-2 flex items-center justify-between">
                 <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
                   <Activity className="size-3" />
-                  نقاط الصحة
+                  درجة الأداء
                 </span>
                 <span className="text-xl font-bold">{meta.healthScore}</span>
               </div>

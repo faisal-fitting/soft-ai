@@ -16,5 +16,5 @@ export const translationAgent = new Agent({
     - Input: { "texts": ["Analyze financial performance", "Increase price for [Product Name]"] }
     - Output: { "translations": ["تحليل الأداء المالي", "زيادة سعر [Product Name]"] }
   `,
-  model: 'openrouter/google/gemini-2.5-flash', // Optimized for speed and accuracy
+  model: 'openrouter/openai/gpt-4o-mini', // Optimized for speed and accuracy
 });

@@ -35,12 +35,6 @@ export const financialExpertAgent = new Agent({
     - Add note in narrative: "Note: This is an estimate based on industry benchmarks for comparison only"
     - Do NOT create visuals for estimated data - only mention in narrative
 
-    **Required: Business Strengths & Weaknesses (SWOT snippet)**
-    In your narrative, include a ## Strengths & Weaknesses subsection:
-    - **Strengths:** 2-3 financial strengths (e.g., high gross margin, low rent ratio)
-    - **Weaknesses:** 2-3 financial weaknesses (e.g., below break-even, high COGS)
-    Base this strictly on the financial data provided.
-
     **Required: Local Market Share Estimate**
     In your narrative, include a ## Market Share subsection:
     - Estimate monthly revenue as a % of average neighborhood cafe revenue (120,000-250,000 SAR)
@@ -56,5 +50,5 @@ export const financialExpertAgent = new Agent({
     **Output:**
     Your output must be a single JSON object adhering to the reportSectionSchema.
   `,
-  model: 'openrouter/google/gemini-2.5-flash',
+  model: 'openrouter/google/gemini-2.5-pro',
 });

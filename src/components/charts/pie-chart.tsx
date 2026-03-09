@@ -6,13 +6,13 @@ import { ChartContainer, ChartTooltipContent } from "@/components/ui/chart";
 import type { ReportVisual } from "@/lib/types";
 
 const COLORS = [
-  "hsl(var(--chart-1))",
-  "hsl(var(--chart-2))",
-  "hsl(var(--chart-3))",
-  "hsl(var(--chart-4))",
-  "hsl(var(--chart-5))",
-  "hsl(210 100% 56%)",
-  "hsl(270 60% 55%)",
+  "#0ea5e9", // sky-500
+  "#f97316", // orange-500
+  "#22c55e", // green-500
+  "#eab308", // yellow-500
+  "#ef4444", // red-500
+  "#8b5cf6", // violet-500
+  "#ec4899", // pink-500
 ];
 
 export function PieChartVisual({ visual }: { visual: ReportVisual }) {
@@ -49,17 +49,26 @@ export function PieChartVisual({ visual }: { visual: ReportVisual }) {
                 nameKey="name"
                 cx="50%"
                 cy="50%"
-                outerRadius={80}
-                innerRadius={40}
+                outerRadius={70}
+                innerRadius={30}
                 label={({ pct }) => `${pct}%`}
-                labelLine={false}
+                labelLine={true}
               >
                 {data.map((_, i) => (
-                  <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                  <Cell key={i} fill={COLORS[i % COLORS.length]} stroke="white" strokeWidth={2} />
                 ))}
               </Pie>
-              <Tooltip content={<ChartTooltipContent />} />
-              <Legend wrapperStyle={{ fontSize: 11 }} />
+              <Tooltip 
+                content={<ChartTooltipContent />} 
+                formatter={(value: number) => [value.toLocaleString("en-US"), ""]}
+              />
+              <Legend 
+                layout="vertical" 
+                align="right" 
+                verticalAlign="middle"
+                wrapperStyle={{ fontSize: 11, paddingLeft: 10 }}
+                formatter={(value) => <span className="text-xs">{value}</span>}
+              />
             </PieChart>
           </ResponsiveContainer>
         </ChartContainer>
