@@ -443,9 +443,16 @@ Follow the Action Plan Synthesis instructions from your system prompt. Output a 
 
 // ── Phase 4: Translation and Assembly ────────────────────────────────────────
 
+const ARABIC_SECTION_TITLES: Record<string, string> = {
+  'financials': 'الوضع المالي',
+  'digital': 'تحليل التواجد الرقمي',
+  'market': 'السوق والمنافسين في القريبين',
+  'action-plan': 'خطة العمل',
+};
+
 const localizeManifest = createStep({
     id: 'localize-manifest',
-    description: 'Translate all English text in the manifest to Arabic',
+    description: 'Translate all English text in the manifest to Arabic with Saudi tone',
     inputSchema: reportManifestSchema,
     outputSchema: reportManifestSchema,
     execute: async ({ inputData, mastra, writer }) => {
@@ -463,7 +470,8 @@ const localizeManifest = createStep({
         stringsToTranslate.push(inputData.directive.focusAreas.market);
 
         inputData.sections.forEach(section => {
-            stringsToTranslate.push(section.title);
+            // Override title with hard-coded Arabic title
+            stringsToTranslate.push(ARABIC_SECTION_TITLES[section.id] || section.title);
             stringsToTranslate.push(section.conclusion.text);
             stringsToTranslate.push(section.narrative);
             section.visuals.forEach(visual => {
@@ -477,21 +485,34 @@ const localizeManifest = createStep({
         
         const translationSchema = z.object({ translations: z.array(z.string()) });
 
+        // 2. Call translation agent with Saudi tone guidance
+        const tonePrompt = `
+أنت خبير تحليل أعمال ومستشار مالي مختص بسوق المقاهي في الرياض.
+استخدم لهجة سعودية محلية ودية واحترافية.
+
+ترجم النصوص التالية إلى العربية الفصحى بم لهجة سعودية محلية:
+- استخدم مصطلحات مالية وتسويقية عربية صحيحة
+- حافظ على الأرقام والنسب المئوية كما هي
+- تجنب اللغة الصناعية أو الآلية
+
+النصوص المراد ترجمتها:
+${JSON.stringify({ texts: stringsToTranslate })}`;
+
         // 2. Call translation agent
         const response = await agent.generate(
-            `Translate this JSON payload of texts: ${JSON.stringify({ texts: stringsToTranslate })}`,
+            tonePrompt,
             {
                 structuredOutput: {
                     schema: translationSchema,
                     errorStrategy: 'fallback',
-                    fallbackValue: { translations: stringsToTranslate } // Fallback to original English on error
+                    fallbackValue: { translations: stringsToTranslate }
                 }
             }
         );
         
         let translations = response.object?.translations;
         if (!translations || translations.length !== stringsToTranslate.length) {
-            return inputData; // Return original on translation failure
+            return inputData;
         }
         
         // 3. Re-assemble the manifest with translated strings
@@ -506,6 +527,7 @@ const localizeManifest = createStep({
         translatedManifest.directive.focusAreas.market = translations[i++];
 
         translatedManifest.sections.forEach(section => {
+            // Use the translated title (already with hard-coded Arabic)
             section.title = translations[i++];
             section.conclusion.text = translations[i++];
             section.narrative = translations[i++];

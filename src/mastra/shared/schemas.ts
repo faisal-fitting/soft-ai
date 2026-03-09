@@ -185,6 +185,14 @@ export const socialAuditOutputSchema = z.object({
 
 // ── Structured Dashboard Schemas (The "Mastra Way") ──────────────────────────
 
+// Hard-coded Arabic section titles
+export const ARABIC_SECTION_TITLES: Record<string, string> = {
+  'financials': 'الوضع المالي',
+  'digital': 'تحليل التواجد الرقمي',
+  'market': 'السوق والمنافسين القريبين',
+  'action-plan': 'خطة العمل',
+};
+
 export const visualTypeSchema = z.enum([
   'bar-chart',
   'line-chart',

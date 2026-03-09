@@ -1,0 +1,8 @@
+- competitor strength and weaknesses analysis (through google maps reviews) - the UI should display this as a table matrix (could a markdown table it's fine)
+- action plan be a clear and practical with phases and steps for each. detailed but short and concise with goals
+- in social media performance analysis, highlight the success posts/videos ..etc
+- mention the strength and weaknesses of the target businesses
+- include local/industry market share (in the financial section)
+- replace json with yaml when feeding data to agent (through prompt, update working memeory..etc and consuption by the agent)
+- any free plain text defined in the output schema should be a markdown
+- add description to the schemas. specially the ones will used as a structuredOutput to the agent

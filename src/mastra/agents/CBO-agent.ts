@@ -65,7 +65,7 @@ export const cboAgent = new Agent({
     **Output:**
     JSON object adhering to reportSectionSchema:
     - id: "action-plan"
-    - title: "Action Plan"
+    - title: "Action Plan" (will be translated to Arabic: خطة العمل)
     - conclusion: Overall execution priority (critical/warning/success)
     - tacticalMoves: Array of 5-7 prioritized moves with timeline context
     - narrative: Strategic roadmap explanation
