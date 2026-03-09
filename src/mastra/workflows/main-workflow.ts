@@ -1,5 +1,6 @@
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { z } from 'zod';
+import { stringify as toYaml } from 'yaml';
 import { getPlaceDetails, getNearbyPlaces } from '../tools/google-places';
 import { googleMapsReviewsTool } from '../tools/google-maps-reiews';
 import { socialMediaScraperTool } from '../tools/social-media-scrape';
@@ -13,7 +14,8 @@ import {
   strategicDirectiveSchema,
   reportManifestSchema,
   semanticAnalysisOutputSchema,
-  socialAuditOutputSchema
+  socialAuditOutputSchema,
+  competitorReviewSummarySchema,
 } from '../shared/schemas';
 
 // Re-export for backwards compatibility
@@ -32,6 +34,7 @@ const placeEnrichedSchema = financialOutputSchema.extend({
 const mergedExternalSchema = placeEnrichedSchema.extend({
   reviews: reviewsResponseSchema,
   nearbyCompetitors: z.array(nearbyPlaceSchema),
+  competitorReviews: z.array(competitorReviewSummarySchema).optional(),
 });
 
 const expertInputSchema = mergedExternalSchema.extend({
@@ -118,6 +121,52 @@ const fetchTargetReviews = createStep({
   },
 });
 
+const fetchCompetitorReviews = createStep({
+  id: 'fetch-competitor-reviews',
+  description: 'Fetch reviews for top 3 competitors to enable strengths/weaknesses analysis',
+  inputSchema: z.record(z.string(), z.any()),
+  outputSchema: z.object({ competitorReviews: z.array(competitorReviewSummarySchema) }),
+  execute: async ({ inputData, requestContext, writer }) => {
+    const competitors: z.infer<typeof nearbyPlaceSchema>[] = inputData['fetch-nearby-competitors']?.nearbyCompetitors ?? [];
+    if (!competitors.length) return { competitorReviews: [] };
+
+    await writer?.write({ type: 'data-step-progress', data: { step: 'competitor-reviews', status: 'running', message: 'جاري جلب تقييمات المنافسين...' } });
+
+    // Pick top 3 by (rating * reviewCount) — most established competitors
+    const top3 = [...competitors]
+      .filter(c => c.id && c.userRatingCount && c.userRatingCount > 5)
+      .sort((a, b) => ((b.rating ?? 0) * (b.userRatingCount ?? 0)) - ((a.rating ?? 0) * (a.userRatingCount ?? 0)))
+      .slice(0, 3);
+
+    const results = await Promise.allSettled(
+      top3.map(async (c) => {
+        const data = await googleMapsReviewsTool.execute!(
+          { place_id: c.id, language: 'ar', sort_by: 'qualityScore' },
+          { requestContext }
+        ) as any;
+        return {
+          placeId: c.id,
+          name: c.displayName?.text ?? 'Unknown',
+          rating: c.rating,
+          reviewCount: c.userRatingCount,
+          reviews: (data.reviews ?? []).slice(0, 10).map((r: any) => ({
+            rating: r.rating,
+            snippet: r.snippet ?? r.extracted_snippet?.original,
+            date: r.date,
+          })),
+        };
+      })
+    );
+
+    const competitorReviews = results
+      .filter((r): r is PromiseFulfilledResult<any> => r.status === 'fulfilled')
+      .map(r => r.value);
+
+    await writer?.write({ type: 'data-step-progress', data: { step: 'competitor-reviews', status: 'complete', message: `تم جلب تقييمات ${competitorReviews.length} منافس` } });
+    return { competitorReviews };
+  },
+});
+
 const fetchSocialData = createStep({
   id: 'fetch-social-data',
   description: 'Scrape social media profiles',
@@ -145,7 +194,7 @@ const runSemanticAnalysis = createStep({
     execute: async ({ inputData, mastra }) => {
         const agent = mastra?.getAgent('semanticAnalysisAgent');
         if (!agent) throw new Error('semanticAnalysisAgent not found');
-        const response = await agent.generate(`Analyze reviews: ${JSON.stringify(inputData.reviews.reviews.slice(0, 20))}`, {
+        const response = await agent.generate(`Analyze reviews:\n${toYaml(inputData.reviews.reviews.slice(0, 20))}`, {
             structuredOutput: {
                 schema: semanticAnalysisOutputSchema,
                 errorStrategy: 'fallback',
@@ -164,7 +213,7 @@ const runSocialAudit = createStep({
     execute: async ({ inputData, mastra }) => {
         const agent = mastra?.getAgent('socialEngagementAuditor');
         if (!agent) throw new Error('socialEngagementAuditor not found');
-        const response = await agent.generate(`Audit social data: ${JSON.stringify(inputData.socialData)}`, {
+        const response = await agent.generate(`Audit social data:\n${toYaml(inputData.socialData)}`, {
             structuredOutput: {
                 schema: socialAuditOutputSchema,
                 errorStrategy: 'fallback',
@@ -223,29 +272,31 @@ const generateFinancialSection = createStep({
     const prompt = `## Context
 You are a financial analyst specializing in Saudi F&B businesses.
 
-## Data Fields (Arabic sample for output labels)
-- netRevenue: الإيرادات الشهرية
-- variableCosts: التكاليف المتغيرة
-- fixedCosts: التكاليف الثابتة
-- grossMargin: هامش الربح الإجمالي
-- netProfit: صافي الربح
-- breakEvenPoint: نقطة التعادل
-
 ## Strategic Directive
 ${inputData.directive.theme}
 
-## Data to Analyze
-${JSON.stringify(inputData.items, null, 2)}
+## Business-Level KPIs (pre-computed — use exactly as provided)
+${toYaml({
+  netRevenue: inputData.netRevenue,
+  variableCosts: inputData.variableCosts,
+  fixedCosts: inputData.fixedCosts,
+  grossProfit: inputData.grossProfit,
+  netProfit: inputData.netProfit,
+  grossMargin: inputData.grossMargin,
+  netMargin: inputData.netMargin,
+  breakEvenRevenue: inputData.breakEvenRevenue,
+  breakEvenGap: inputData.breakEvenGap,
+  isAboveBreakEven: inputData.isAboveBreakEven,
+})}
+
+## Per-Product Data
+${toYaml(inputData.items)}
 
 ## Task
-Analyze the financial data and provide actionable insights for the business owner.
-Focus on profitability, break-even analysis, and cost optimization.
-Include visual components that show financial KPIs, cost breakdown, and break-even comparison.
-
-## Output Rules
-- Output ALL text in Arabic
-- Do NOT mix Arabic and English
-- Use Arabic labels from the Data Fields section above`;
+Analyze the financial data and provide actionable insights.
+IMPORTANT: Use the pre-computed KPIs exactly as provided in your metric-grid visuals.
+Do NOT recalculate totals from per-product data.
+Focus on profitability, break-even analysis, cost optimization, and menu engineering.`;
     const response = await agent!.generate(prompt, {
       structuredOutput: {
         schema: reportSectionSchema,
@@ -299,20 +350,15 @@ You are a digital marketing specialist for Saudi F&B businesses.
 ${inputData.directive.theme}
 
 ## Semantic Analysis (from Google Reviews)
-${JSON.stringify(inputData.semanticAnalysis, null, 2)}
+${toYaml(inputData.semanticAnalysis)}
 
 ## Social Media Audit
-${JSON.stringify(inputData.socialAudit, null, 2)}
+${toYaml(inputData.socialAudit)}
 
 ## Task
 Analyze the digital presence data and provide actionable insights.
 Focus on online reputation, social media performance, and competitive digital positioning.
-Include visual components that show rating metrics, engagement benchmarks, and competitor comparisons.
-
-## Output Rules
-- Output ALL text in Arabic
-- Do NOT mix Arabic and English
-- Use Arabic labels from the Data Fields section above`;
+Include visual components that show rating metrics, engagement benchmarks, and competitor comparisons.`;
     const response = await agent!.generate(prompt, {
       structuredOutput: {
         schema: reportSectionSchema,
@@ -346,17 +392,27 @@ You are a market research specialist for Saudi F&B businesses.
 ${inputData.directive.theme}
 
 ## Nearby Competitors
-${JSON.stringify(inputData.nearbyCompetitors.slice(0, 5), null, 2)}
+${toYaml(inputData.nearbyCompetitors.slice(0, 5))}
+
+## Competitor Reviews (sampled from Google Maps)
+${toYaml(inputData.competitorReviews ?? [])}
 
 ## Task
 Analyze the market data and provide competitive insights.
 Focus on competitor positioning, pricing strategies, and market opportunities.
 Include visual components that show competitor metrics, pricing comparison, and market benchmarks.
 
-## Output Rules
-- Output ALL text in Arabic
-- Do NOT mix Arabic and English
-- Use Arabic labels from the Data Fields section above`;
+**IMPORTANT: Exclude any competitor from your analysis if they have 0 reviews AND 0 rating.**
+These are unverified or inactive listings, not real competitors.
+
+**REQUIRED: Competitor Strengths & Weaknesses Table**
+In your narrative, include a markdown table comparing each competitor:
+
+| المنافس | نقاط القوة | نقاط الضعف | التقييم |
+|---------|-----------|-----------|--------|
+| اسم المنافس | قوة 1، قوة 2 | ضعف 1 | 4.5 ⭐ |
+
+Base the strengths/weaknesses on their review content above.`;
     const response = await agent!.generate(prompt, {
       structuredOutput: {
         schema: reportSectionSchema,
@@ -393,30 +449,60 @@ const generateActionPlanSection = createStep({
     const threadId = (inputData.base as any).threadId || `studio-${Date.now()}`;
     
     const prompt = `## Mode 2: Action Plan Synthesis
-    
-Synthesize the following expert reports into a unified Action Plan.
+
+You are the CEO. Synthesize the three expert reports below into a single, unified, phased Action Plan.
 
 ### Strategic Directive
-${JSON.stringify((inputData.base as any).directive)}
+${toYaml((inputData.base as any).directive)}
 
 ### Financial Section
-${JSON.stringify(inputData.financials)}
+${toYaml(inputData.financials)}
 
 ### Digital Section
-${JSON.stringify(inputData.digital)}
+${toYaml(inputData.digital)}
 
 ### Market Section
-${JSON.stringify(inputData.market)}
+${toYaml(inputData.market)}
 
-Follow the Action Plan Synthesis instructions from your system prompt. Output a JSON object with:
-- id: "action-plan"
-- title: "خطة العمل" (Action Plan in Arabic)
-- conclusion: Overall priority
-- tacticalMoves: TOP 5-7 prioritized moves with timeline
-- narrative: Strategic roadmap`;
+### Required Output Structure
+
+**narrative** (Markdown): Write a 3-phase execution roadmap. Each phase must have:
+- A clear **goal** (what success looks like)
+- **2-3 specific steps** (concrete, measurable actions)
+- **Why** this phase comes before the next
+
+Use this structure:
+## Phase 1: Immediate Actions (Week 1)
+**Goal:** [one-sentence goal]
+- Step 1: [specific action with metric]
+- Step 2: [specific action with metric]
+
+## Phase 2: Short-Term Improvements (Weeks 2-4)
+**Goal:** [one-sentence goal]
+- Step 1: ...
+
+## Phase 3: Growth Initiatives (Months 2-3)
+**Goal:** [one-sentence goal]
+- Step 1: ...
+
+**tacticalMoves**: Select the TOP 5-7 highest-impact moves across all three sections.
+Each move action should include the phase context, e.g. "[Phase 1] Raise Latte price by 2 SAR..."
+Rank by: impact (high > medium > low), then speed (quick wins first).
+
+**IMPORTANT: If the North Star metric is related to service quality, customer satisfaction,
+or operational efficiency (e.g., CSAT, service speed), you MUST add 1-2 operational
+improvement moves even if they don't appear in the expert sections.**
+
+Examples of operational moves:
+- Hire or redistribute staff during peak hours
+- Implement queue management or pre-order system
+- Optimize workstation layout or workflow
+- Add automation (POS, online ordering)
+
+**conclusion**: Overall execution urgency (critical/warning/success) based on the north star metric gap.`;
     
     const response = await agent.generate(prompt, {
-      model: 'openrouter/google/gemini-2.5-flash',
+      prepareStep: () => ({ model: 'openrouter/google/gemini-2.5-flash' }),
       memory: { thread: threadId, resource: 'user' },
       structuredOutput: {
         schema: reportSectionSchema,
@@ -446,7 +532,7 @@ Follow the Action Plan Synthesis instructions from your system prompt. Output a 
 const ARABIC_SECTION_TITLES: Record<string, string> = {
   'financials': 'الوضع المالي',
   'digital': 'تحليل التواجد الرقمي',
-  'market': 'السوق والمنافسين في القريبين',
+  'market': 'السوق والمنافسين القريبين',
   'action-plan': 'خطة العمل',
 };
 
@@ -496,7 +582,7 @@ const localizeManifest = createStep({
 - تجنب اللغة الصناعية أو الآلية
 
 النصوص المراد ترجمتها:
-${JSON.stringify({ texts: stringsToTranslate })}`;
+${toYaml({ texts: stringsToTranslate })}`;
 
         // 2. Call translation agent
         const response = await agent.generate(
@@ -556,7 +642,7 @@ export const businessAnalysisWorkflow = createWorkflow({
 })
   .then(collectFinancials)
   .then(fetchPlaceDetails)
-  .parallel([fetchTargetReviews, fetchNearbyCompetitors, fetchSocialData])
+  .parallel([fetchTargetReviews, fetchNearbyCompetitors, fetchSocialData, fetchCompetitorReviews])
   .map(async ({ inputData, getStepResult }) => {
     const base = getStepResult<z.infer<typeof placeEnrichedSchema>>('fetch-place-details');
     const parallel = inputData;
@@ -564,7 +650,8 @@ export const businessAnalysisWorkflow = createWorkflow({
         ...base, 
         reviews: parallel['fetch-target-reviews']?.reviews, 
         nearbyCompetitors: parallel['fetch-nearby-competitors']?.nearbyCompetitors,
-        socialData: parallel['fetch-social-data']?.socialData
+        socialData: parallel['fetch-social-data']?.socialData,
+        competitorReviews: parallel['fetch-competitor-reviews']?.competitorReviews ?? [],
     };
   }, { id: 'merge-external-data' })
   .parallel([runSemanticAnalysis, runSocialAudit])
@@ -607,6 +694,9 @@ export const businessAnalysisWorkflow = createWorkflow({
         businessType: expertOutput.base.businessType,
         generatedAt: new Date().toISOString(),
         healthScore: expertOutput.base.healthScore,
+        photoUrl: expertOutput.base.placeDetails?.photos?.[0]?.name
+          ? `https://places.googleapis.com/v1/${expertOutput.base.placeDetails.photos[0].name}/media?maxHeightPx=400&key=${process.env.GOOGLE_PLACES_API_KEY || 'AIzaSyAgbQvK5FZC_2liZ9mM6a7-HJSz8lC4CoQ'}`
+          : undefined,
       },
       directive: expertOutput.base.directive,
       sections: [

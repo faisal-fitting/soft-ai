@@ -170,9 +170,6 @@ export function computeFinancials(input: FinancialInput): FinancialOutput {
   const manufacturingCostPerUnit =
     totalMonthlyCapacity > 0 ? productionStaffCosts / totalMonthlyCapacity : 0;
 
-  const numProducts = items.length;
-  const fixedCostPerProduct = numProducts > 0 ? fixedCosts / numProducts : 0;
-
   // Compute total item revenue for revenueShare
   const totalItemRevenue = items.reduce(
     (sum, i) => sum + i.sellingPrice * i.soldUnits, 0,
@@ -183,18 +180,29 @@ export function computeFinancials(input: FinancialInput): FinancialOutput {
     const revenueShare =
       totalItemRevenue !== 0 ? (totalRevenue / totalItemRevenue) * 100 : 0;
 
-    // Use totalCostPerUnit if provided, otherwise sum rawMaterial + packaging
-    const itemRawMaterial = item.rawMaterialCostPerUnit ?? 0;
+    // Use totalCostPerUnit if provided (total mode), otherwise sum rawMaterial + packaging
+    const itemRawMaterial = item.totalCostPerUnit ?? item.rawMaterialCostPerUnit ?? 0;
     const itemPackaging = item.totalCostPerUnit !== undefined ? 0 : (item.packagingCostPerUnit ?? 0);
     const variableCostPerUnit = itemRawMaterial + itemPackaging + manufacturingCostPerUnit;
+    
+    // Allocate fixed costs proportionally by revenue share (Bug 9 fix)
     const fixedCostAllocationPerUnit =
-      item.soldUnits > 0 ? fixedCostPerProduct / item.soldUnits : 0;
+      totalItemRevenue > 0 && item.soldUnits > 0
+        ? (totalRevenue / totalItemRevenue) * fixedCosts / item.soldUnits
+        : 0;
+    
     const fullCostPerUnit = variableCostPerUnit + fixedCostAllocationPerUnit;
     const contributionMarginPerUnit = item.sellingPrice - variableCostPerUnit;
     const profitPerUnit = item.sellingPrice - fullCostPerUnit;
+    
+    // Break-even uses the proportional fixed cost allocation
+    const itemFixedCostShare =
+      totalItemRevenue > 0 && contributionMarginPerUnit > 0
+        ? (totalRevenue / totalItemRevenue) * fixedCosts
+        : 0;
     const breakEvenUnits =
       contributionMarginPerUnit > 0
-        ? fixedCostPerProduct / contributionMarginPerUnit
+        ? itemFixedCostShare / contributionMarginPerUnit
         : Number.MAX_SAFE_INTEGER;
     const capacityUtilizationPercent =
       (item.dailyProductionCapacity ?? 0) > 0

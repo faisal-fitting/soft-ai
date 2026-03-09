@@ -35,6 +35,18 @@ export const financialExpertAgent = new Agent({
     - Add note in narrative: "Note: This is an estimate based on industry benchmarks for comparison only"
     - Do NOT create visuals for estimated data - only mention in narrative
 
+    **Required: Business Strengths & Weaknesses (SWOT snippet)**
+    In your narrative, include a ## Strengths & Weaknesses subsection:
+    - **Strengths:** 2-3 financial strengths (e.g., high gross margin, low rent ratio)
+    - **Weaknesses:** 2-3 financial weaknesses (e.g., below break-even, high COGS)
+    Base this strictly on the financial data provided.
+
+    **Required: Local Market Share Estimate**
+    In your narrative, include a ## Market Share subsection:
+    - Estimate monthly revenue as a % of average neighborhood cafe revenue (120,000-250,000 SAR)
+    - Estimate share of Riyadh cafe market (7.7B SAR annually)
+    - Include a metric in the metric-grid visual with label "حصة السوق المحلية" showing the % estimate
+
     **Output Language:**
     CRITICAL: All string fields in your output JSON ('title', 'conclusion.text', 'narrative', etc.) MUST be in **English**.
 

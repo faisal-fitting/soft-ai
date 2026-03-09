@@ -3,7 +3,7 @@
 import { unstable_noStore as noStore } from 'next/cache';
 import { toAISdkV5Messages } from '@mastra/ai-sdk/ui';
 import { mastra } from '@/mastra';
-import type { ReportManifest } from '@/app/page';
+import type { ReportManifest } from '@/lib/types';
 
 export async function getThreadMessages(threadId: string) {
   noStore();

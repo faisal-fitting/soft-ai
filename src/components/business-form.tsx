@@ -371,9 +371,11 @@ export function BusinessForm({ onSubmit, isSubmitting }: Props) {
             field === "name" ? String(row[col]) : Number(row[col]) || 0;
         }
       }
-      // "إجمالي التكلفة" overrides raw material cost and signals total mode
+      // "إجمالي التكلفة" is the total monthly cost — divide by units to get per-unit cost
       if (row["إجمالي التكلفة"] !== undefined) {
-        item.totalCostPerUnit = Number(row["إجمالي التكلفة"]) || 0;
+        const totalCost = Number(row["إجمالي التكلفة"]) || 0;
+        const units = Number(row["وحدات مباعة شهرياً"]) || 1;
+        item.totalCostPerUnit = totalCost / units;
       }
       return item;
     }).filter((it) => it.name.trim());

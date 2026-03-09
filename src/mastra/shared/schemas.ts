@@ -25,6 +25,11 @@ export const placeDetailsSchema = z.object({
     weekdayDescriptions: z.array(z.string()).optional(),
   }).optional(),
   priceLevel: z.string().optional(),
+  photos: z.array(z.object({
+    name: z.string(),
+    widthPx: z.number().optional(),
+    heightPx: z.number().optional(),
+  })).optional(),
 });
 
 export const nearbyPlaceSchema = placeDetailsSchema;
@@ -158,29 +163,57 @@ export const competitorAnalysisSchema = z.object({
 // ── Feature Extractor Schemas (For Supporting Agents) ──────────────────────
 
 export const semanticAnalysisOutputSchema = z.object({
-  sentimentScore: z.number().min(0).max(100),
+  sentimentScore: z.number().min(0).max(100).describe('Overall sentiment score 0-100, where 0=extremely negative, 50=neutral, 100=extremely positive'),
   themes: z.array(z.object({
-    topic: z.string(),
-    sentiment: z.enum(['positive', 'negative', 'neutral']),
-    mentions: z.number(),
-    exampleSnippets: z.array(z.string()),
-  })),
-  criticalWeakness: z.string().optional(),
+    topic: z.string().describe('Theme topic in English, e.g. "Coffee Quality", "Service Speed"'),
+    sentiment: z.enum(['positive', 'negative', 'neutral']).describe('Dominant sentiment for this theme'),
+    mentions: z.number().describe('Number of reviews mentioning this theme'),
+    exampleSnippets: z.array(z.string()).describe('2-3 verbatim review snippets that best illustrate this theme'),
+  })).describe('Recurring themes found in reviews (only themes appearing in ≥15% of reviews)'),
+  criticalWeakness: z.string().optional().describe('Markdown description of the single most damaging recurring complaint — the one that most hurts customer satisfaction'),
+  strengths: z.array(z.string()).optional().describe('Top 3 business strengths identified from positive review themes'),
+  weaknesses: z.array(z.string()).optional().describe('Top 3 business weaknesses identified from negative review themes'),
+});
+
+export const topContentSchema = z.object({
+  platform: z.enum(['instagram', 'tiktok']).describe('Social media platform'),
+  type: z.enum(['post', 'reel', 'video']).describe('Content type'),
+  caption: z.string().optional().describe('Post caption or title'),
+  url: z.string().optional().describe('Direct URL to the post/video for citation'),
+  likes: z.number().optional().describe('Number of likes'),
+  views: z.number().optional().describe('Number of views'),
+  engagementScore: z.number().describe('Engagement score = (likes + comments + shares) / followers * 100'),
+  whySuccessful: z.string().describe('Markdown explanation of why this content performed well'),
 });
 
 export const socialAuditOutputSchema = z.object({
-  healthScore: z.number().min(1).max(10),
+  healthScore: z.number().min(1).max(10).describe('Overall social media health score 1-10'),
   platformBenchmarks: z.array(z.object({
-    platform: z.enum(['instagram', 'tiktok']),
-    status: z.enum(['above-benchmark', 'at-benchmark', 'below-benchmark']),
-    engagementRate: z.number(),
-    benchmark: z.number(),
-  })),
-  contentStrategyGap: z.string(),
+    platform: z.enum(['instagram', 'tiktok']).describe('Social media platform'),
+    status: z.enum(['above-benchmark', 'at-benchmark', 'below-benchmark']).describe('Performance vs Saudi F&B benchmark'),
+    engagementRate: z.number().describe('Actual engagement rate as percentage'),
+    benchmark: z.number().describe('Saudi F&B benchmark engagement rate for this platform'),
+  })).describe('Per-platform engagement benchmarks'),
+  contentStrategyGap: z.string().describe('Markdown description of the biggest content strategy gap — what type of content is missing or underperforming'),
   viralitySignals: z.object({
-    shareToImpressionRatio: z.number(),
-    growthPotential: z.enum(['high', 'medium', 'low']),
-  }),
+    shareToImpressionRatio: z.number().describe('Ratio of shares to impressions — 1%+ indicates viral potential'),
+    growthPotential: z.enum(['high', 'medium', 'low']).describe('Overall growth potential assessment'),
+  }).describe('Virality and growth potential signals'),
+  topPerformingContent: z.array(topContentSchema).optional().describe('Top 3-5 best performing posts/videos by engagement, with URLs for citations'),
+});
+
+// ── Competitor Reviews Schema ─────────────────────────────────────────────────
+
+export const competitorReviewSummarySchema = z.object({
+  placeId: z.string().describe('Google place ID of the competitor'),
+  name: z.string().describe('Competitor business name'),
+  rating: z.number().optional().describe('Overall Google rating'),
+  reviewCount: z.number().optional().describe('Total number of reviews'),
+  reviews: z.array(z.object({
+    rating: z.number(),
+    snippet: z.string().optional(),
+    date: z.string().optional(),
+  })).describe('Sample reviews (up to 10) sorted by qualityScore'),
 });
 
 // ── Structured Dashboard Schemas (The "Mastra Way") ──────────────────────────
@@ -203,51 +236,51 @@ export const visualTypeSchema = z.enum([
 ]);
 
 export const chartDataPointSchema = z.object({
-  label: z.string(),
-  value: z.number(),
-  comparisonValue: z.number().optional(),
-  category: z.string().optional(),
+  label: z.string().describe('Arabic label for the data point, e.g. "الإيرادات"'),
+  value: z.number().describe('Numeric value for the data point'),
+  comparisonValue: z.number().optional().describe('Optional benchmark or comparison value'),
+  category: z.string().optional().describe('Optional category grouping for the data point'),
 });
 
 export const reportVisualSchema = z.object({
-  type: visualTypeSchema,
-  title: z.string(),
-  description: z.string(),
-  data: z.array(chartDataPointSchema),
-  config: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).optional(),
+  type: visualTypeSchema.describe('Chart type to render'),
+  title: z.string().describe('Short Arabic title for the visual'),
+  description: z.string().describe('Markdown description explaining what this visual shows and why it matters'),
+  data: z.array(chartDataPointSchema).describe('Data points for the visual — all labels must be in Arabic'),
+  config: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).optional().describe('Optional chart config overrides'),
 });
 
 export const reportSectionSchema = z.object({
-  id: z.string(),
-  title: z.string(),
+  id: z.string().describe('Section identifier, e.g. "financials", "digital", "market", "action-plan"'),
+  title: z.string().describe('Fixed Arabic section title — use the value from ARABIC_SECTION_TITLES, do NOT translate or change it'),
   conclusion: z.object({
-    text: z.string(),
-    severity: z.enum(['success', 'warning', 'critical']),
-  }),
-  visuals: z.array(reportVisualSchema),
-  narrative: z.string().describe('Detailed Markdown explanation with citations'),
-  citations: z.array(z.string()).optional(),
+    text: z.string().describe('Markdown one-sentence conclusion summarizing the section finding'),
+    severity: z.enum(['success', 'warning', 'critical']).describe('Traffic-light severity: success=healthy, warning=needs attention, critical=urgent action required'),
+  }).describe('Section conclusion with severity indicator'),
+  visuals: z.array(reportVisualSchema).describe('2-3 charts or grids that visually prove the conclusion'),
+  narrative: z.string().describe('Detailed Markdown narrative (use ## headers, bullet points, bold for key numbers). Must include: strengths, weaknesses, analysis, and recommendations. All text in English (will be translated).'),
+  citations: z.array(z.string()).optional().describe('Source URLs or references used in the analysis'),
   tacticalMoves: z.array(z.object({
-    action: z.string(),
-    impact: z.enum(['high', 'medium', 'low']),
-    deadline: z.string(),
-  })).optional(),
+    action: z.string().describe('Markdown action description — specific, measurable, data-backed'),
+    impact: z.enum(['high', 'medium', 'low']).describe('Business impact level'),
+    deadline: z.string().describe('Relative deadline string, e.g. "1 week", "2 weeks", "1 month", "Ongoing"'),
+  })).optional().describe('Prioritized list of tactical actions derived from this section\'s analysis'),
 });
 
 export const strategicDirectiveSchema = z.object({
-  theme: z.string(),
+  theme: z.string().describe('Markdown narrative theme for the report, e.g. "From Survival to Stability" — the business story in one line'),
   northStarMetric: z.object({
-    name: z.string(),
-    value: z.number(),
-    target: z.number(),
-    rationale: z.string(),
-  }),
+    name: z.string().describe('Name of the single most important metric to improve, e.g. "Net Profit Margin"'),
+    value: z.number().describe('Current value of the north star metric'),
+    target: z.number().describe('Target value to achieve'),
+    rationale: z.string().describe('Markdown explanation of why this metric was chosen as the north star'),
+  }).describe('The single metric that if improved would resolve the core business conflict'),
   focusAreas: z.object({
-    financial: z.string(),
-    digital: z.string(),
-    market: z.string(),
-  }),
-  overallStatus: z.enum(['CRITICAL', 'WARNING', 'HEALTHY', 'EXCEPTIONAL']),
+    financial: z.string().describe('Markdown one-line financial focus area'),
+    digital: z.string().describe('Markdown one-line digital focus area'),
+    market: z.string().describe('Markdown one-line market focus area'),
+  }).describe('Strategic focus area per domain'),
+  overallStatus: z.enum(['CRITICAL', 'WARNING', 'HEALTHY', 'EXCEPTIONAL']).describe('Overall business health status'),
 });
 
 export const reportManifestSchema = z.object({
@@ -256,6 +289,7 @@ export const reportManifestSchema = z.object({
     businessType: z.string(),
     generatedAt: z.string(),
     healthScore: z.number(),
+    photoUrl: z.string().optional(),
   }),
   directive: strategicDirectiveSchema,
   sections: z.array(reportSectionSchema),

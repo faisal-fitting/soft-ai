@@ -18,9 +18,18 @@ export const useReportStore = create<ReportStore>()(
       threadId: null,
       businessName: null,
       phase: 'form',
-      startReport: (runId, threadId, businessName) => set({ runId, threadId, businessName, phase: 'chat' }),
-      selectThread: (threadId) => set({ threadId, runId: null, businessName: null, phase: 'chat' }),
-      reset: () => set({ runId: null, threadId: null, businessName: null, phase: 'form' }),
+      startReport: (runId, threadId, businessName) => {
+        console.log("[store:startReport]", { runId, threadId, businessName });
+        set({ runId, threadId, businessName, phase: 'chat' });
+      },
+      selectThread: (threadId) => {
+        console.log("[store:selectThread]", { threadId });
+        set({ threadId, runId: null, businessName: null, phase: 'chat' });
+      },
+      reset: () => {
+        console.log("[store:reset]");
+        set({ runId: null, threadId: null, businessName: null, phase: 'form' });
+      },
     }),
     { name: 'cbo-report' }
   )
