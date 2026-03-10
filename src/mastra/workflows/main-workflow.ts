@@ -547,105 +547,6 @@ const ARABIC_SECTION_TITLES: Record<string, string> = {
   'action-plan': 'خطة العمل',
 };
 
-const localizeManifest = createStep({
-    id: 'localize-manifest',
-    description: 'Translate all English text in the manifest to Arabic with Saudi tone',
-    inputSchema: reportManifestSchema,
-    outputSchema: reportManifestSchema,
-    execute: async ({ inputData, mastra, writer }) => {
-        await writer?.write({ type: 'data-step-progress', data: { step: 'translate', status: 'running', message: 'جاري الترجمة إلى العربية...' } });
-        const agent = mastra?.getAgent('translationAgent');
-        if (!agent) return inputData;
-
-        // 1. Collect all strings to be translated
-        let stringsToTranslate: string[] = [];
-        stringsToTranslate.push(inputData.directive.theme);
-        stringsToTranslate.push(inputData.directive.northStarMetric.name);
-        stringsToTranslate.push(inputData.directive.northStarMetric.rationale);
-        stringsToTranslate.push(inputData.directive.focusAreas.financial);
-        stringsToTranslate.push(inputData.directive.focusAreas.digital);
-        stringsToTranslate.push(inputData.directive.focusAreas.market);
-
-        inputData.sections.forEach(section => {
-            // Override title with hard-coded Arabic title
-            stringsToTranslate.push(ARABIC_SECTION_TITLES[section.id] || section.title);
-            stringsToTranslate.push(section.conclusion.text);
-            stringsToTranslate.push(section.narrative);
-            section.visuals.forEach(visual => {
-                stringsToTranslate.push(visual.title);
-                stringsToTranslate.push(visual.description);
-            });
-            section.tacticalMoves?.forEach(move => {
-                stringsToTranslate.push(move.action);
-            });
-        });
-        
-        const translationSchema = z.object({ translations: z.array(z.string()) });
-
-        // 2. Call translation agent with Saudi tone guidance
-        const tonePrompt = `
-أنت كاتب محتوى عربي متخصص في التقارير المالية والتسويقية للمطاعم والمقاهي في السعودية.
-هدفك هو جعل النص翻译 يبدو وكأنه كتبه محلل أعمال سعودي محترف - ودّي، قريب من الواقع، واحترافي.
-
-قواعد مهمة جداً:
-1. **الأرقام**: استخدم الأرقام الإنجليزية (1,234.56) وليس العربية (١٬٢٣٤٫٥٦). لا تترجم الأرقام مطلقاً.
-2. **الرموز**: أضف رموز العملة والنسبة مباشرة بعد الرقم (مثل: 1,234 ر.س أو 25%)
-3. **المصطلحات**: استخدم المصطلحات الشائعة في السوق السعودي (ريال، نسبة، هامش، إلخ)
-4. **التنسيق**: اجعل الجمل قصيرة ومباشرة. تجنب الترجمة الحرفية.
-5. **النبرة**: كأنك تكتب لصاحب café صغير - واضح، عملي، ومتفهم.
-
-النصوص المراد ترجمتها:
-${toYaml({ texts: stringsToTranslate })}`;
-
-        // 2. Call translation agent
-        const response = await agent.generate(
-            tonePrompt,
-            {
-                structuredOutput: {
-                    schema: translationSchema,
-                    errorStrategy: 'fallback',
-                    fallbackValue: { translations: stringsToTranslate }
-                }
-            }
-        );
-        
-        let translations = response.object?.translations;
-        if (!translations || translations.length !== stringsToTranslate.length) {
-            return inputData;
-        }
-        
-        // 3. Re-assemble the manifest with translated strings
-        let i = 0;
-        const translatedManifest = { ...inputData };
-
-        translatedManifest.directive.theme = translations[i++];
-        translatedManifest.directive.northStarMetric.name = translations[i++];
-        translatedManifest.directive.northStarMetric.rationale = translations[i++];
-        translatedManifest.directive.focusAreas.financial = translations[i++];
-        translatedManifest.directive.focusAreas.digital = translations[i++];
-        translatedManifest.directive.focusAreas.market = translations[i++];
-
-        translatedManifest.sections.forEach(section => {
-            // Use the translated title (already with hard-coded Arabic)
-            section.title = translations[i++];
-            section.conclusion.text = translations[i++];
-            section.narrative = translations[i++];
-            section.visuals.forEach(visual => {
-                visual.title = translations[i++];
-                visual.description = translations[i++];
-            });
-            section.tacticalMoves?.forEach(move => {
-                move.action = translations[i++];
-            });
-        });
-
-        await writer?.write({ type: 'data-step-progress', data: { step: 'translate', status: 'complete', message: 'تم الترجمة' } });
-        return translatedManifest;
-    }
-});
-
-
-
 // ── Workflow Definition ───────────────────────────────────────────────────────
 
 export const businessAnalysisWorkflow = createWorkflow({
@@ -717,6 +618,7 @@ export const businessAnalysisWorkflow = createWorkflow({
         address: expertOutput.base.placeDetails?.formattedAddress,
         rating: expertOutput.base.placeDetails?.rating,
         reviewCount: expertOutput.base.placeDetails?.userRatingCount,
+        displayName: expertOutput.base.placeDetails?.displayName?.text,
       },
       directive: expertOutput.base.directive,
       sections: [
@@ -727,6 +629,5 @@ export const businessAnalysisWorkflow = createWorkflow({
       ],
     };
   }, { id: 'assemble-manifest' })
-  .then(localizeManifest);
 
 businessAnalysisWorkflow.commit();

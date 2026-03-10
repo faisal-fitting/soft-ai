@@ -1,10 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import { motion, AnimatePresence } from "motion/react";
-import { Loader2 } from "lucide-react";
+import { Loader2, XCircle } from "lucide-react";
 
 import { getThreadMessages, getWorkflowRun, saveThreadTitle } from "@/app/actions";
 import { useReportStore } from "@/store/report-store";
@@ -15,14 +16,13 @@ import { BusinessForm, type FinancialFormData } from "@/components/business-form
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import type { ReportManifest, StepProgress } from "@/lib/types";
 
-// Hardcoded fallback run for debugging — remove when no longer needed
-const DEBUG_RUN_ID = "d0547ff0-4522-4309-8485-ed283492d58b";
-
 interface Props {
   sessionKey: number;
+  urlRunId?: string | null;
 }
 
-export function ReportSession({ sessionKey }: Props) {
+export function ReportSession({ sessionKey, urlRunId }: Props) {
+  const router = useRouter();
   const store = useReportStore();
   const phase = store.phase;
   const businessName = store.businessName;
@@ -35,6 +35,7 @@ export function ReportSession({ sessionKey }: Props) {
   const [manifest, setManifest] = useState<ReportManifest | null>(null);
   const [workflowProgress, setWorkflowProgress] = useState<StepProgress | null>(null);
   const [loadingHistory, setLoadingHistory] = useState(true);
+  const [restoreError, setRestoreError] = useState<string | null>(null);
 
   const pendingFormData = useRef<FinancialFormData | null>(null);
   const pendingThreadId = useRef<string>(threadId);
@@ -55,22 +56,18 @@ export function ReportSession({ sessionKey }: Props) {
     transport: workflowTransport,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     onData: (part: any) => {
-      console.log("[onData] type:", part.type, "| id:", part.id, "| dataKeys:", Object.keys(part.data ?? {}));
-
       if (part.type === "data-step-progress") {
         setWorkflowProgress(part.data as StepProgress);
       }
       if (part.type === "data-workflow") {
-        console.log("[onData:workflow] status:", part.data?.status, "| hasOutput:", !!part.data?.output, "| outputKeys:", Object.keys(part.data?.output ?? {}));
         if (part.id && !store.runId) {
           store.startReport(part.id, pendingThreadId.current, pendingFormData.current?.businessName ?? "");
+          router.replace(`/?run=${part.id}`, { scroll: false } as any);
         }
         const output = part.data?.output;
         if (output && part.data?.status === "success") {
           const candidate = output.metadata ? output : output.result;
-          console.log("[onData:workflow] candidate keys:", Object.keys(candidate ?? {}), "| hasMetadata:", !!candidate?.metadata, "| hasDirective:", !!candidate?.directive, "| hasSections:", !!candidate?.sections);
           if (candidate?.metadata && candidate?.directive && candidate?.sections) {
-            console.log("[onData:workflow] setting manifest ✓");
             setManifest(candidate as ReportManifest);
             setWorkflowProgress(null);
           }
@@ -78,7 +75,6 @@ export function ReportSession({ sessionKey }: Props) {
       }
     },
     onFinish: ({ isError }: { isError?: boolean }) => {
-      console.log("[workflow:onFinish] isError:", isError, "| hasManifest:", !!manifest);
       if (isError) console.error("[workflow] stream ended with error");
       setWorkflowProgress(null);
     },
@@ -101,33 +97,37 @@ export function ReportSession({ sessionKey }: Props) {
   });
 
   // ── Restore manifest + chat history on mount ───────────────────────────────
-  // Always attempts restore using store runId, falling back to DEBUG_RUN_ID.
-  // If a manifest is found the phase is already "chat" (set by startReport),
-  // so the report view renders directly without going through the form.
+  // Priority: urlRunId > store.runId > nothing (show form)
   useEffect(() => {
-    const { runId, threadId: storedThreadId } = useReportStore.getState();
-    const resolvedRunId = runId || DEBUG_RUN_ID;
-    console.log("[restore] resolvedRunId:", resolvedRunId, "| storedThreadId:", storedThreadId, "| storePhase:", store.phase);
+    const { runId: storedRunId, threadId: storedThreadId } = useReportStore.getState();
+    const resolvedRunId = urlRunId || storedRunId;
+
+    // No run to restore — show the form
+    if (!resolvedRunId) {
+      setLoadingHistory(false);
+      return;
+    }
 
     Promise.all([
       getWorkflowRun(resolvedRunId),
       storedThreadId ? getThreadMessages(storedThreadId) : Promise.resolve([]),
     ])
       .then(([restoredManifest, msgs]) => {
-        console.log("[restore] restoredManifest:", !!restoredManifest, "| msgs:", msgs.length, "| phase:", store.phase);
         if (restoredManifest) {
-          console.log("[restore] setting manifest from restore ✓ keys:", Object.keys(restoredManifest));
           setManifest(restoredManifest);
-          // Ensure store is in chat phase so the report view shows
           if (!store.phase || store.phase === "form") {
             store.startReport(resolvedRunId, storedThreadId ?? threadId, store.businessName ?? "");
           }
+        } else if (urlRunId) {
+          // URL had a runId but nothing was found
+          setRestoreError(urlRunId);
         }
         if (msgs.length > 0) setMessages(msgs as UIMessage[]);
         setLoadingHistory(false);
       })
       .catch((err: unknown) => {
         console.error("[ReportSession] restore failed:", err);
+        if (urlRunId) setRestoreError(urlRunId);
         setLoadingHistory(false);
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -157,12 +157,39 @@ export function ReportSession({ sessionKey }: Props) {
     [sendMessage]
   );
 
-  const showProgress = !!workflowProgress && !manifest;
+  // showProgress is true from the moment the workflow starts (workflowRunning)
+  // until the manifest arrives — prevents flashing "no report yet" on first load.
+  const showProgress = (workflowRunning || !!workflowProgress) && !manifest;
 
   if (loadingHistory) {
     return (
       <div className="flex flex-1 items-center justify-center">
         <Loader2 className="size-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (restoreError) {
+    return (
+      <div className="flex flex-1 flex-col items-center justify-center gap-3 px-8 text-center" dir="rtl">
+        <div className="flex size-14 items-center justify-center rounded-full border-2 border-red-200 bg-red-50 dark:border-red-800/40 dark:bg-red-950/20">
+          <XCircle className="size-7 text-red-500" />
+        </div>
+        <h2 className="text-lg font-bold">لم يتم العثور على التقرير</h2>
+        <p className="text-sm text-muted-foreground max-w-sm">
+          لا يوجد تقرير بالمعرّف{" "}
+          <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">{restoreError}</code>
+        </p>
+        <button
+          onClick={() => {
+            setRestoreError(null);
+            store.reset();
+            router.replace("/");
+          }}
+          className="mt-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+        >
+          إنشاء تقرير جديد
+        </button>
       </div>
     );
   }
@@ -181,10 +208,6 @@ export function ReportSession({ sessionKey }: Props) {
       <BusinessSidebar
         manifest={manifest}
         isGenerating={isGenerating}
-        onNewReport={() => {
-          store.reset();
-          setManifest(null);
-        }}
       />
 
       {/* Main content area — constrained between the two sidebars */}
@@ -199,7 +222,7 @@ export function ReportSession({ sessionKey }: Props) {
               exit={{ opacity: 0, x: -24 }}
               transition={{ duration: 0.3, ease: "easeInOut" }}
             >
-              <BusinessForm onSubmit={handleFormSubmit} isSubmitting={showProgress} />
+              <BusinessForm onSubmit={handleFormSubmit} isSubmitting={workflowRunning} />
             </motion.div>
           ) : (
             <motion.div

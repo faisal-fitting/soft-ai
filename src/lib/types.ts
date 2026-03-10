@@ -49,6 +49,7 @@ export type ReportManifest = {
     address?: string;
     rating?: number;
     reviewCount?: number;
+    displayName?: string;
   };
   directive: {
     theme: string;

@@ -1,10 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "motion/react";
+import { Loader2 } from "lucide-react";
 import { ReportSession } from "@/components/report-session";
 
-export default function Home() {
+function HomeContent() {
+  const searchParams = useSearchParams();
+  const urlRunId = searchParams.get("run");
   const [sessionKey, setSessionKey] = useState(0);
 
   return (
@@ -18,9 +22,23 @@ export default function Home() {
           exit={{ opacity: 0 }}
           transition={{ duration: 0.25 }}
         >
-          <ReportSession sessionKey={sessionKey} />
+          <ReportSession sessionKey={sessionKey} urlRunId={urlRunId} />
         </motion.div>
       </AnimatePresence>
     </div>
+  );
+}
+
+export default function Home() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex h-screen items-center justify-center bg-background">
+          <Loader2 className="size-6 animate-spin text-muted-foreground" />
+        </div>
+      }
+    >
+      <HomeContent />
+    </Suspense>
   );
 }

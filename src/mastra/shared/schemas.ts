@@ -269,7 +269,7 @@ export const reportVisualSchema = z.object({
   type: visualTypeSchema.describe('Chart type to render'),
   title: z.string().describe('Title for the visual'),
   description: z.string().describe('Markdown description explaining what this visual shows'),
-  data: z.array(chartDataPointSchema).describe('Data points for the visual'),
+  data: z.array(chartDataPointSchema).min(1).describe('Data points for the visual (must have at least 1)'),
   config: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.array(z.string())])).optional().describe('Optional chart config overrides (columns should be array of strings)'),
 });
 
@@ -316,6 +316,7 @@ export const reportManifestSchema = z.object({
     address: z.string().optional(),
     rating: z.number().optional(),
     reviewCount: z.number().optional(),
+    displayName: z.string().optional(),
   }),
   directive: strategicDirectiveSchema,
   sections: z.array(reportSectionSchema),

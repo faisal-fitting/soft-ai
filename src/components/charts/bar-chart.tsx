@@ -1,28 +1,25 @@
 "use client";
 
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-} from "recharts";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ChartContainer, ChartTooltipContent } from "@/components/ui/chart";
+import {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+  ChartLegend,
+  ChartLegendContent,
+  type ChartConfig,
+} from "@/components/ui/chart";
 import type { ReportVisual } from "@/lib/types";
 
 export function BarChartVisual({ visual }: { visual: ReportVisual }) {
   const hasComparison = visual.data.some((d) => d.comparisonValue != null);
 
-  const config = {
-    value:           { label: "القيمة",  color: "hsl(var(--chart-1))" },
-    comparisonValue: { label: "المعيار", color: "hsl(var(--chart-2))" },
+  const config: ChartConfig = {
+    value:           { label: "القيمة",  color: "var(--chart-1)" },
+    comparisonValue: { label: "المعيار", color: "var(--chart-2)" },
   };
 
-  // Recharts needs data keys matching the dataKey prop
   const data = visual.data.map((d) => ({
     label: d.label,
     value: d.value,
@@ -35,43 +32,45 @@ export function BarChartVisual({ visual }: { visual: ReportVisual }) {
       <CardHeader className="pb-2">
         <CardTitle className="text-base">{visual.title}</CardTitle>
         {visual.description && (
-          <p className="text-xs text-muted-foreground">{visual.description}</p>
+          <p className="text-muted-foreground">{visual.description}</p>
         )}
       </CardHeader>
       <CardContent>
         <ChartContainer config={config} className="h-52 w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={data} layout="horizontal" style={{ direction: 'ltr' }} reverseStackOrder>
-              <CartesianGrid horizontal={true} />
-              <XAxis type="number" tickLine={false} axisLine={false} tickFormatter={(v) => v.toLocaleString("ar-SA")} />
-              <YAxis
-                type="category"
-                dataKey="label"
-                tickLine={false}
-                axisLine={false}
-                width={100}
-                tick={{ fontSize: 11 }}
-              />
-              <Tooltip 
-                content={
-                  <ChartTooltipContent 
-                    formatter={(value, name, item) => {
-                      const unit = item.payload.unit;
-                      return [
-                        `${Number(value).toLocaleString("ar-SA")} ${unit || ""}`,
-                        item.name === "value" ? "القيمة" : "المعيار"
-                      ];
-                    }}
-                  />
-                } 
-              />
-              {hasComparison && <Legend />}
-              <Bar dataKey="value" fill="hsl(var(--chart-1))" radius={[0, 4, 4, 0]} />
-              {hasComparison && (
-                <Bar dataKey="comparisonValue" fill="hsl(var(--chart-2))" radius={[0, 4, 4, 0]} />
-              )}
-            </BarChart>
-          </ResponsiveContainer>
+          <BarChart data={data} layout="vertical" style={{ direction: "ltr" }}>
+            <CartesianGrid horizontal={false} />
+            <XAxis
+              type="number"
+              tickLine={false}
+              axisLine={false}
+              tickFormatter={(v) => v.toLocaleString("ar-SA")}
+            />
+            <YAxis
+              type="category"
+              dataKey="label"
+              tickLine={false}
+              axisLine={false}
+              width={110}
+              tick={{ fontSize: 11 }}
+            />
+            <ChartTooltip
+              content={
+                <ChartTooltipContent
+                  formatter={(value, name, item) => [
+                    `${Number(value).toLocaleString("ar-SA")}${item.payload.unit ? ` ${item.payload.unit} ` : " "}`,
+                    name === "value" ? "القيمة" : "المعيار",
+                  ]}
+                />
+              }
+            />
+            {hasComparison && (
+              <ChartLegend content={<ChartLegendContent />} />
+            )}
+            <Bar dataKey="value" fill="var(--color-value)" radius={[0, 4, 4, 0]} />
+            {hasComparison && (
+              <Bar dataKey="comparisonValue" fill="var(--color-comparisonValue)" radius={[0, 4, 4, 0]} />
+            )}
+          </BarChart>
         </ChartContainer>
       </CardContent>
     </Card>

@@ -59,8 +59,8 @@ export function ChatSidebar({ messages, status, businessName, hasReport, onSend,
   if (!hasReport && !isGenerating) return null;
 
   return (
-    <Sidebar side="right" dir="rtl" collapsible="none" style={{ "--sidebar-width": "20rem" } as React.CSSProperties} className="">
-      <SidebarHeader className="border-b px-4 py-3">
+    <Sidebar side="right" dir="rtl" collapsible="none" style={{ "--sidebar-width": "20rem" } as React.CSSProperties} className="bg-transparent border-s-0">
+      <SidebarHeader className="px-4 py-3 border-b">
         <p className="text-sm font-semibold">المحادثة</p>
       </SidebarHeader>
 
@@ -120,7 +120,7 @@ export function ChatSidebar({ messages, status, businessName, hasReport, onSend,
         </Conversation>
       </SidebarContent>
 
-      <SidebarFooter className="border-t p-3">
+      <SidebarFooter className="p-3">
         <PromptInput
           onSubmit={({ text }) => {
             if (!text.trim() || isGenerating) return;
