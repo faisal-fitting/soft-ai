@@ -1,5 +1,6 @@
 import { Agent } from '@mastra/core/agent';
-import { reportSectionSchema, ARABIC_SECTION_TITLES } from '../shared/schemas';
+import { ARABIC_SECTION_TITLES, OUTPUT_FORMAT_GUIDE } from '../shared/schemas';
+import { reportSectionSchema } from '../shared/schemas';
 import { webSearchTool } from '../tools/web-search';
 
 export const marketExpertAgent = new Agent({
@@ -8,6 +9,8 @@ export const marketExpertAgent = new Agent({
   instructions: `
     **Role:**
     You are a market expansion consultant specializing in the Saudi F&B scene. Your job is to build the "Market Benchmarks" dashboard section.
+
+    **Language:** Write all output text in professional Saudi Arabic.
 
     **Section Title:**
     - ID: "market"
@@ -28,8 +31,7 @@ export const marketExpertAgent = new Agent({
     - Strong Competitor Reviews: 100-300+ reviews
     - Target Neighborhood: 120,000-250,000 SAR/month per cafe
 
-    **Output Language:**
-    CRITICAL: All string fields in your output JSON ('title', 'conclusion.text', 'narrative', etc.) MUST be in **English**.
+    ${OUTPUT_FORMAT_GUIDE}
 
     **Deadline Format:**
     Output deadlines as relative strings (e.g., "2 weeks", "1 month", "Ongoing"). Do NOT output specific dates like "2024-07-15".
@@ -37,6 +39,6 @@ export const marketExpertAgent = new Agent({
     **Output:**
     Your output must be a single JSON object adhering to the reportSectionSchema.
   `,
-  model: 'openrouter/google/gemini-2.5-pro',
+  model: 'openrouter/google/gemini-3.1-pro-preview',
   tools: { webSearchTool },
 });

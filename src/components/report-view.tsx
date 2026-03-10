@@ -26,6 +26,7 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import type { ReportManifest, ReportSection, ReportVisual } from "@/lib/types";
 import { Streamdown } from "streamdown";
+import { MessageResponse } from "@/components/ai-elements/message";
 import { BarChartVisual } from "@/components/charts/bar-chart";
 import { LineChartVisual } from "@/components/charts/line-chart";
 import { PieChartVisual } from "@/components/charts/pie-chart";
@@ -33,8 +34,9 @@ import { RadarChartVisual } from "@/components/charts/radar-chart";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function fmt(n: number, decimals = 0): string {
-  return n.toLocaleString("ar-SA", { maximumFractionDigits: decimals });
+function fmt(n: number, decimals = 0, unit?: string): string {
+  const formatted = n.toLocaleString("ar-SA", { maximumFractionDigits: decimals });
+  return unit ? `${formatted} ${unit}` : formatted;
 }
 
 // ── Conclusion Badge ──────────────────────────────────────────────────────────
@@ -77,8 +79,8 @@ function Citations({ citations }: { citations?: string[] }) {
 function NarrativeBlock({ markdown }: { markdown: string }) {
   if (!markdown) return null;
   return (
-    <div className="prose prose-sm dark:prose-invert mt-4 max-w-none text-right leading-relaxed" dir="rtl">
-      <Streamdown>{markdown}</Streamdown>
+    <div className="mt-4 text-right leading-relaxed" dir="rtl">
+      <MessageResponse>{markdown}</MessageResponse>
     </div>
   );
 }
@@ -102,11 +104,11 @@ function MetricGridVisual({ visual }: { visual: ReportVisual }) {
             return (
               <div key={i} className="rounded-lg border bg-background p-3 text-center">
                 <p className="text-[10px] text-muted-foreground uppercase">{d.label}</p>
-                <p className="text-2xl font-bold mt-1">{fmt(d.value)}</p>
+                <p className="text-2xl font-bold mt-1">{fmt(d.value, 0, d.unit)}</p>
                 {hasCmp && (
                   <div className="flex items-center justify-center gap-1 mt-1">
                     <TrendIcon className={cn('size-3', diff! > 0 ? 'text-emerald-500' : diff! < 0 ? 'text-red-500' : 'text-muted-foreground')} />
-                    <span className="text-[10px] text-muted-foreground">{fmt(d.comparisonValue!)}</span>
+                    <span className="text-[10px] text-muted-foreground">{fmt(d.comparisonValue!, 0, d.unit)}</span>
                   </div>
                 )}
               </div>
@@ -121,6 +123,7 @@ function MetricGridVisual({ visual }: { visual: ReportVisual }) {
 function TableVisual({ visual }: { visual: ReportVisual }) {
   const hasComparison = visual.data.some(d => d.comparisonValue != null);
   const hasCategory = visual.data.some(d => d.category);
+  const hasUnit = visual.data.some(d => d.unit);
 
   return (
     <Card>
@@ -142,8 +145,8 @@ function TableVisual({ visual }: { visual: ReportVisual }) {
             {visual.data.map((d, i) => (
               <TableRow key={i}>
                 <TableCell className="font-medium">{d.label}</TableCell>
-                <TableCell className="tabular-nums">{fmt(d.value)}</TableCell>
-                {hasComparison && <TableCell className="tabular-nums text-muted-foreground">{d.comparisonValue != null ? fmt(d.comparisonValue) : '-'}</TableCell>}
+                <TableCell className="tabular-nums">{fmt(d.value, 0, d.unit)}</TableCell>
+                {hasComparison && <TableCell className="tabular-nums text-muted-foreground">{d.comparisonValue != null ? fmt(d.comparisonValue, 0, d.unit) : '-'}</TableCell>}
                 {hasCategory && <TableCell className="text-muted-foreground">{d.category ?? '-'}</TableCell>}
               </TableRow>
             ))}

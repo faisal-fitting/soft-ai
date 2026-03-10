@@ -14,6 +14,7 @@ export type ChartDataPoint = {
   value: number;
   comparisonValue?: number;
   category?: string;
+  unit?: string;
 };
 
 export type ReportVisual = {
@@ -21,7 +22,7 @@ export type ReportVisual = {
   title: string;
   description: string;
   data: ChartDataPoint[];
-  config?: Record<string, string | number | boolean>;
+  config?: Record<string, string | number | boolean | string[]>;
 };
 
 export type ReportSection = {

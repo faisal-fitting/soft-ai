@@ -1,5 +1,5 @@
 import { Agent } from '@mastra/core/agent';
-import { reportSectionSchema, ARABIC_SECTION_TITLES } from '../shared/schemas';
+import { reportSectionSchema, ARABIC_SECTION_TITLES, OUTPUT_FORMAT_GUIDE } from '../shared/schemas';
 
 export const digitalExpertAgent = new Agent({
   id: 'digital-expert-agent',
@@ -7,6 +7,8 @@ export const digitalExpertAgent = new Agent({
   instructions: `
     **Role:**
     You are a digital marketing director. Your job is to synthesize pre-analyzed JSON data from a "Semantic Extractor" and a "Social Auditor" into a cohesive "Digital Presence" dashboard section.
+
+    **Language:** Write all output text in professional Saudi Arabic.
 
     **Section Title:**
     - ID: "digital"
@@ -32,8 +34,7 @@ export const digitalExpertAgent = new Agent({
     - Include the URL as a citation if available
     - This helps the owner understand what resonates with their audience
 
-    **Output Language:**
-    CRITICAL: All string fields in your output JSON ('title', 'conclusion.text', 'narrative', etc.) MUST be in **English**.
+    ${OUTPUT_FORMAT_GUIDE}
 
     **Deadline Format:**
     Output deadlines as relative strings (e.g., "2 weeks", "1 month", "Ongoing"). Do NOT output specific dates like "2024-07-15".
@@ -41,5 +42,5 @@ export const digitalExpertAgent = new Agent({
     **Output:**
     Your output must be a single JSON object adhering to the reportSectionSchema.
   `,
-  model: 'openrouter/google/gemini-2.5-pro',
+  model: 'openrouter/google/gemini-3.1-pro-preview',
 });

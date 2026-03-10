@@ -14,12 +14,13 @@ import {
   SidebarGroupLabel,
 } from "@/components/ui/sidebar";
 import type { ReportManifest } from "@/lib/types";
+import { Message, MessageContent, MessageResponse } from "./ai-elements/message";
 
 const STATUS_CFG = {
   EXCEPTIONAL: { label: "استثنائي", variant: "default" as const, cls: "bg-emerald-500 text-white" },
-  HEALTHY:     { label: "صحي",      variant: "default" as const, cls: "bg-blue-500 text-white" },
-  WARNING:     { label: "تحذير",    variant: "default" as const, cls: "bg-amber-500 text-white" },
-  CRITICAL:    { label: "حرج",      variant: "destructive" as const, cls: "" },
+  HEALTHY: { label: "صحي", variant: "default" as const, cls: "bg-blue-500 text-white" },
+  WARNING: { label: "تحذير", variant: "default" as const, cls: "bg-amber-500 text-white" },
+  CRITICAL: { label: "حرج", variant: "destructive" as const, cls: "" },
 } as const;
 
 interface Props {
@@ -130,13 +131,18 @@ export function BusinessSidebar({ manifest, isGenerating, onNewReport }: Props) 
                 {[
                   { label: "المالي", value: directive.focusAreas.financial },
                   { label: "الرقمي", value: directive.focusAreas.digital },
-                  { label: "السوق",  value: directive.focusAreas.market },
+                  { label: "السوق", value: directive.focusAreas.market },
                 ].map((area) => (
                   <div key={area.label} className="rounded-md border bg-background p-2.5">
                     <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                       {area.label}
                     </p>
-                    <p className="mt-0.5 text-sm leading-snug">{area.value}</p>
+                 
+                        <MessageResponse>
+
+                          {area.value}
+                        </MessageResponse>
+                 
                   </div>
                 ))}
               </div>

@@ -26,6 +26,7 @@ export function LineChartVisual({ visual }: { visual: ReportVisual }) {
     label: d.label,
     value: d.value,
     comparisonValue: d.comparisonValue,
+    unit: d.unit,
   }));
 
   return (
@@ -48,7 +49,19 @@ export function LineChartVisual({ visual }: { visual: ReportVisual }) {
                 tick={{ fontSize: 11 }}
               />
               <YAxis tickLine={false} axisLine={false} tickFormatter={(v) => v.toLocaleString("ar-SA")} />
-              <Tooltip content={<ChartTooltipContent />} />
+              <Tooltip 
+                content={
+                  <ChartTooltipContent 
+                    formatter={(value, name, item) => {
+                      const unit = item.payload.unit;
+                      return [
+                        `${Number(value).toLocaleString("ar-SA")} ${unit || ""}`,
+                        item.name === "value" ? "القيمة" : "المعيار"
+                      ];
+                    }}
+                  />
+                } 
+              />
               {hasComparison && <Legend />}
               <Line
                 type="monotone"

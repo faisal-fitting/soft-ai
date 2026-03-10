@@ -27,6 +27,7 @@ export function BarChartVisual({ visual }: { visual: ReportVisual }) {
     label: d.label,
     value: d.value,
     comparisonValue: d.comparisonValue,
+    unit: d.unit,
   }));
 
   return (
@@ -40,8 +41,8 @@ export function BarChartVisual({ visual }: { visual: ReportVisual }) {
       <CardContent>
         <ChartContainer config={config} className="h-52 w-full">
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={data} layout="vertical" margin={{ top: 0, right: 8, bottom: 0, left: 8 }}>
-              <CartesianGrid horizontal={false} />
+            <BarChart data={data} layout="horizontal" style={{ direction: 'ltr' }} reverseStackOrder>
+              <CartesianGrid horizontal={true} />
               <XAxis type="number" tickLine={false} axisLine={false} tickFormatter={(v) => v.toLocaleString("ar-SA")} />
               <YAxis
                 type="category"
@@ -51,7 +52,19 @@ export function BarChartVisual({ visual }: { visual: ReportVisual }) {
                 width={100}
                 tick={{ fontSize: 11 }}
               />
-              <Tooltip content={<ChartTooltipContent />} />
+              <Tooltip 
+                content={
+                  <ChartTooltipContent 
+                    formatter={(value, name, item) => {
+                      const unit = item.payload.unit;
+                      return [
+                        `${Number(value).toLocaleString("ar-SA")} ${unit || ""}`,
+                        item.name === "value" ? "القيمة" : "المعيار"
+                      ];
+                    }}
+                  />
+                } 
+              />
               {hasComparison && <Legend />}
               <Bar dataKey="value" fill="hsl(var(--chart-1))" radius={[0, 4, 4, 0]} />
               {hasComparison && (

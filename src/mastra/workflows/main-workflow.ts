@@ -455,8 +455,6 @@ const generateActionPlanSection = createStep({
     
     const prompt = `## Action Plan Synthesis
 
-You are the CEO. Create a unified, phased Action Plan for the business owner.
-
 ## Overall Goal (North Star)
 ${toYaml((inputData.base as any).directive)}
 
@@ -539,7 +537,8 @@ List 5-7 top actions. Each must include:
   },
 });
 
-// ── Phase 4: Translation and Assembly ────────────────────────────────────────
+// ── Phase 4: Assembly ───────────────────────────────────────────────────────────
+
 
 const ARABIC_SECTION_TITLES: Record<string, string> = {
   'financials': 'الوضع المالي',

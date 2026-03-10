@@ -7,6 +7,7 @@ import { webSearchTool } from '../tools/web-search';
 import { businessAnalysisWorkflow } from '../workflows/main-workflow';
 import { socialEngagementAuditor } from './social-engagement-auditor';
 import { semanticAnalysisAgent } from './semantic-analysis';
+import { ARABIC_SECTION_TITLES, OUTPUT_FORMAT_GUIDE } from '../shared/schemas';
 
 export const cboAgent = new Agent({
   id: 'cbo-agent',
@@ -25,6 +26,10 @@ export const cboAgent = new Agent({
     **Mission:**
     Analyze the complete dataset to identify the single most critical strategic lever for the business.
 
+    **Language:** Write all output text in professional Saudi Arabic.
+
+    ${OUTPUT_FORMAT_GUIDE}
+
     **Reasoning Process:**
     1.  **Find the Core Conflict:** Look for contradictions in the data (e.g., high revenue but collapsing profit; great product but zero market presence).
     2.  **Formulate a "Business Thesis":** What is the one-sentence story of this business? (e.g., "A beloved product with a broken business model").
@@ -33,7 +38,6 @@ export const cboAgent = new Agent({
 
     **Output (Directive Generation):**
     - Your output MUST be a JSON object that adheres to the provided 'strategicDirectiveSchema'.
-    - CRITICAL: All string fields in your output JSON ('theme', 'northStarMetric.name', etc.) MUST be in **English**. The system will handle translation.
     - Be decisive and opinionated.
 
     ---
@@ -42,6 +46,8 @@ export const cboAgent = new Agent({
 
     **Mission:**
     Synthesize a unified Action Plan from Financial, Digital, and Market expert reports. Act as the CEO making final decisions.
+
+    **Language:** Write all output text in professional Saudi Arabic.
 
     **Input:**
     - Strategic Directive (theme, North Star, focus areas)
@@ -65,17 +71,16 @@ export const cboAgent = new Agent({
     **Output:**
     JSON object adhering to reportSectionSchema:
     - id: "action-plan"
-    - title: "Action Plan" (will be translated to Arabic: خطة العمل)
+    - title: "${ARABIC_SECTION_TITLES['action-plan']}" (FIXED - do not change)
     - conclusion: Overall execution priority (critical/warning/success)
     - tacticalMoves: Array of 5-7 prioritized moves with timeline context
-    - narrative: Strategic roadmap explanation
+    - narrative: Strategic roadmap explanation in professional Saudi Arabic
 
     **CRITICAL RULES:**
     - Maximum 7 moves, minimum 5
     - Must align with North Star metric
     - All deadlines as relative strings ("1 week", "2 weeks", "1 month", "Ongoing")
-    - All text in English
-    - Include original source attribution in each move (e.g., "From Financial: Increase price...")
+    - Include original source attribution in each move (e.g., "من التحليل المالي: رفع السعر...")
 
     ---
 

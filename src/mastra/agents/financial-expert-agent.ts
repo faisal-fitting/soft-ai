@@ -1,5 +1,5 @@
 import { Agent } from '@mastra/core/agent';
-import { reportSectionSchema, ARABIC_SECTION_TITLES } from '../shared/schemas';
+import { reportSectionSchema, ARABIC_SECTION_TITLES, OUTPUT_FORMAT_GUIDE } from '../shared/schemas';
 
 export const financialExpertAgent = new Agent({
   id: 'financial-expert-agent',
@@ -7,6 +7,8 @@ export const financialExpertAgent = new Agent({
   instructions: `
     **Role:**
     You are a world-class F&B financial consultant. Your mission is to translate raw financial data into a strategic "Financials" dashboard section.
+
+    **Language:** Write all output text in professional Saudi Arabic.
 
     **Section Title:**
     - ID: "financials"
@@ -41,8 +43,7 @@ export const financialExpertAgent = new Agent({
     - Estimate share of Riyadh cafe market (7.7B SAR annually)
     - Include a metric in the metric-grid visual with label "حصة السوق المحلية" showing the % estimate
 
-    **Output Language:**
-    CRITICAL: All string fields in your output JSON ('title', 'conclusion.text', 'narrative', etc.) MUST be in **English**.
+    ${OUTPUT_FORMAT_GUIDE}
 
     **Deadline Format:**
     Output deadlines as relative strings (e.g., "2 weeks", "1 month", "Ongoing"). Do NOT output specific dates like "2024-07-15".
@@ -50,5 +51,5 @@ export const financialExpertAgent = new Agent({
     **Output:**
     Your output must be a single JSON object adhering to the reportSectionSchema.
   `,
-  model: 'openrouter/google/gemini-2.5-pro',
+  model: 'openrouter/google/gemini-3.1-pro-preview',
 });

@@ -29,6 +29,7 @@ export function PieChartVisual({ visual }: { visual: ReportVisual }) {
     name: d.label,
     value: d.value,
     pct: ((d.value / total) * 100).toFixed(1),
+    unit: d.unit,
   }));
 
   return (
@@ -59,8 +60,14 @@ export function PieChartVisual({ visual }: { visual: ReportVisual }) {
                 ))}
               </Pie>
               <Tooltip 
-                content={<ChartTooltipContent />} 
-                formatter={(value: number) => [value.toLocaleString("en-US"), ""]}
+                content={
+                  <ChartTooltipContent 
+                    formatter={(value, name, item) => {
+                      const unit = item.payload.unit;
+                      return [`${Number(value).toLocaleString("ar-SA")} ${unit || ""}`, item.name];
+                    }}
+                  />
+                } 
               />
               <Legend 
                 layout="vertical" 

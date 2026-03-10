@@ -226,6 +226,28 @@ export const ARABIC_SECTION_TITLES: Record<string, string> = {
   'action-plan': 'خطة العمل',
 };
 
+// Bilingual Expert Persona - injected into all expert agents
+export const BILINGUAL_EXPERT_PERSONA = `
+Write in a friendly, casual Saudi Arabic tone. Think of it as talking to a cafe owner you know personally. Use simple everyday words. Occasionally add a light touch like "أخوي", "يا طويل العمر", or "والله". Keep it natural and warm, not stiff or corporate. Explain any technical terms in plain Arabic.
+`;
+
+// Compact format guide for rich markdown output
+export const OUTPUT_FORMAT_GUIDE = `
+You are an expert at creating visually rich, highly engaging, and scannable Markdown content.
+When populating the \`narrative\` field in the JSON response, you MUST adhere to the following rules:
+
+1. **Rich Formatting**: Break up text into scannable chunks using headings (##, ###) and bold text (**text**).
+2. **Visual Elements**: Use Markdown tables to present data clearly. Simulate "stat cards" using blockquotes (>) combined with bold text.
+3. **Emojis**: Liberally use emojis to create visual anchors and make the text engaging (e.g., 📊, 📈, 📉, 🔥, 💡, ✨, 🚀).
+4. **JSON String Escaping**: Since the output must be valid JSON, NEVER output raw newlines. Use literal \\n for all line breaks.
+
+<examples>
+{
+  "narrative": "## 📊 خلاصة الوضع يا طويل العمر 🔥\\n\\nأخوي، الوضع الحالي فيه نقاط قوة وفيه أشياء لازم ن修正ها! 📈\\n\\n### ✨ اللي يحتاج اهتمامك:\\n\\n> 💡 **هامش الربح:** **8%** بس والله، والمعيار 23% 🔥\\n> 👥 **معدل التفاعل:** **1.02%** فقط، يحتاج يصير 3%\\n\\n### 📊 الأرقام على السريع:\\n\\n| البند | القيمة | الحالة |\\n|---------|--------|-----------|\\n| المبيعات | 53,200 | زين ⚖️ |\\n| التكاليف | 29,999 | عالية 🔥 |\\n\\nوالله إذا سوينا التعديلات هذي،鹊个项目 بيكون روووعه! 🚀"
+}
+</examples>
+`;
+
 export const visualTypeSchema = z.enum([
   'bar-chart',
   'line-chart',
@@ -236,49 +258,50 @@ export const visualTypeSchema = z.enum([
 ]);
 
 export const chartDataPointSchema = z.object({
-  label: z.string().describe('Arabic label for the data point, e.g. "الإيرادات"'),
+  label: z.string().describe('Label for the data point'),
   value: z.number().describe('Numeric value for the data point'),
   comparisonValue: z.number().optional().describe('Optional benchmark or comparison value'),
+  unit: z.string().optional().describe('Optional unit for the value (e.g., "SAR", "%", " SAR")'),
   category: z.string().optional().describe('Optional category grouping for the data point'),
 });
 
 export const reportVisualSchema = z.object({
   type: visualTypeSchema.describe('Chart type to render'),
-  title: z.string().describe('Short Arabic title for the visual'),
-  description: z.string().describe('Markdown description explaining what this visual shows and why it matters'),
-  data: z.array(chartDataPointSchema).describe('Data points for the visual — all labels must be in Arabic'),
-  config: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).optional().describe('Optional chart config overrides'),
+  title: z.string().describe('Title for the visual'),
+  description: z.string().describe('Markdown description explaining what this visual shows'),
+  data: z.array(chartDataPointSchema).describe('Data points for the visual'),
+  config: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.array(z.string())])).optional().describe('Optional chart config overrides (columns should be array of strings)'),
 });
 
 export const reportSectionSchema = z.object({
   id: z.string().describe('Section identifier, e.g. "financials", "digital", "market", "action-plan"'),
-  title: z.string().describe('Fixed Arabic section title — use the value from ARABIC_SECTION_TITLES, do NOT translate or change it'),
+  title: z.string().describe('Fixed Arabic section title from ARABIC_SECTION_TITLES'),
   conclusion: z.object({
-    text: z.string().describe('Markdown one-sentence conclusion summarizing the section finding'),
-    severity: z.enum(['success', 'warning', 'critical']).describe('Traffic-light severity: success=healthy, warning=needs attention, critical=urgent action required'),
+    text: z.string().describe('One-sentence conclusion summarizing the section finding'),
+    severity: z.enum(['success', 'warning', 'critical']).describe('Traffic-light severity: success=healthy, warning=needs attention, critical=urgent'),
   }).describe('Section conclusion with severity indicator'),
   visuals: z.array(reportVisualSchema).describe('2-3 charts or grids that visually prove the conclusion'),
-  narrative: z.string().describe('Detailed Markdown narrative (use ## headers, bullet points, bold for key numbers). Must include: analysis and key findings. All text in English (will be translated).'),
+  narrative: z.string().describe('Detailed Markdown narrative with analysis and key findings'),
   citations: z.array(z.string()).optional().describe('Source URLs or references used in the analysis'),
   tacticalMoves: z.array(z.object({
-    action: z.string().describe('Markdown action description — specific, measurable, data-backed'),
+    action: z.string().describe('Action description — specific, measurable, data-backed'),
     impact: z.enum(['high', 'medium', 'low']).describe('Business impact level'),
     deadline: z.string().describe('Relative deadline string, e.g. "1 week", "2 weeks", "1 month", "Ongoing"'),
   })).optional().describe('Prioritized list of tactical actions derived from this section\'s analysis'),
 });
 
 export const strategicDirectiveSchema = z.object({
-  theme: z.string().describe('Markdown narrative theme for the report, e.g. "From Survival to Stability" — the business story in one line'),
+  theme: z.string().describe('Narrative theme for the report — the business story in one line'),
   northStarMetric: z.object({
-    name: z.string().describe('Name of the single most important metric to improve, e.g. "Net Profit Margin"'),
+    name: z.string().describe('Name of the single most important metric to improve'),
     value: z.number().describe('Current value of the north star metric'),
     target: z.number().describe('Target value to achieve'),
-    rationale: z.string().describe('Markdown explanation of why this metric was chosen as the north star'),
+    rationale: z.string().describe('Explanation of why this metric was chosen as the north star'),
   }).describe('The single metric that if improved would resolve the core business conflict'),
   focusAreas: z.object({
-    financial: z.string().describe('Markdown one-line financial focus area'),
-    digital: z.string().describe('Markdown one-line digital focus area'),
-    market: z.string().describe('Markdown one-line market focus area'),
+    financial: z.string().describe('One-line financial focus area'),
+    digital: z.string().describe('One-line digital focus area'),
+    market: z.string().describe('One-line market focus area'),
   }).describe('Strategic focus area per domain'),
   overallStatus: z.enum(['CRITICAL', 'WARNING', 'HEALTHY', 'EXCEPTIONAL']).describe('Overall business health status'),
 });

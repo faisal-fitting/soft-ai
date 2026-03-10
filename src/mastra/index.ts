@@ -10,7 +10,6 @@ import { cboAgent } from './agents/CBO-agent';
 import { financialExpertAgent } from './agents/financial-expert-agent';
 import { digitalExpertAgent } from './agents/digital-expert-agent';
 import { marketExpertAgent } from './agents/market-expert-agent';
-import { translationAgent } from './agents/translation-agent';
 
 // Specialized tools/agents
 import { semanticAnalysisAgent } from './agents/semantic-analysis';
@@ -23,7 +22,6 @@ export const mastra = new Mastra({
     financialExpertAgent,
     digitalExpertAgent,
     marketExpertAgent,
-    translationAgent,
     semanticAnalysisAgent,
     socialEngagementAuditor,
   },
