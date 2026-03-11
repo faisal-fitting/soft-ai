@@ -33,7 +33,7 @@ export async function POST(req: Request) {
     resourceId: resourceId || 'user',
     workingMemory: `[سياق] هذا تقرير تحليل الأعمال (JSON):
 
-${JSON.stringify(validatedManifest, null, 2)}
+    ${JSON.stringify(validatedManifest, null, 2)}
 
 استخدم هذا التقرير للإجابة على أسئلة المستخدم. كن دقيقاً واستشهد ببيانات التقرير.`,
   });
