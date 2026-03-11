@@ -13,6 +13,8 @@ import {
   DollarSign,
   Globe,
   BarChart3,
+  Clock,
+  ChevronLeft,
   type LucideIcon,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardAction } from "@/components/ui/card";
@@ -200,136 +202,207 @@ function VisualRenderer({ visual }: { visual: ReportVisual }) {
 
 // ── Action Plan ──────────────────────────────────────────────────────────────
 
-const PHASE_COLORS = [
-  { header: 'bg-rose-50/60 dark:bg-rose-950/10',   progress: '[&>div]:bg-rose-500'   },
-  { header: 'bg-amber-50/60 dark:bg-amber-950/10', progress: '[&>div]:bg-amber-400'  },
-  { header: 'bg-emerald-50/60 dark:bg-emerald-950/10', progress: '[&>div]:bg-emerald-500' },
+// Phase accent colors — cycling rose → amber → emerald
+const PHASE_PALETTE = [
+  {
+    dot:        'bg-rose-500',
+    line:       'bg-rose-200 dark:bg-rose-900/40',
+    headerBg:   'bg-rose-50/60 dark:bg-rose-950/10',
+    taskBorder: 'border-rose-200 dark:border-rose-900/50',
+    badge:      'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300',
+    stepNum:    'bg-rose-100 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400',
+  },
+  {
+    dot:        'bg-amber-500',
+    line:       'bg-amber-200 dark:bg-amber-900/40',
+    headerBg:   'bg-amber-50/60 dark:bg-amber-950/10',
+    taskBorder: 'border-amber-200 dark:border-amber-900/50',
+    badge:      'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300',
+    stepNum:    'bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400',
+  },
+  {
+    dot:        'bg-emerald-500',
+    line:       'bg-emerald-200 dark:bg-emerald-900/40',
+    headerBg:   'bg-emerald-50/60 dark:bg-emerald-950/10',
+    taskBorder: 'border-emerald-200 dark:border-emerald-900/50',
+    badge:      'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300',
+    stepNum:    'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400',
+  },
 ];
 
+/** Backward-compat: parse old narrative-based action plans if no structured phases present */
 type ParsedNarrative = {
   goal: string;
   phases: Array<{ title: string; targetGoal: string; body: string }>;
 };
 
-/** Split narrative into a goal statement + phase cards.
- *  The first ## heading that does NOT look like "Phase N" is treated as the goal.
- */
 function parseNarrative(narrative: string): ParsedNarrative {
   const lines = narrative.split('\n');
   let goal = '';
   const phases: ParsedNarrative['phases'] = [];
   let current: { title: string; targetGoal: string; bodyLines: string[] } | null = null;
-
   const isPhaseHeading = (t: string) => /phase|مرحلة/i.test(t);
-
   for (const line of lines) {
     if (line.startsWith('## ')) {
-      // Flush previous section
-      if (current) {
-        phases.push({ title: current.title, targetGoal: current.targetGoal, body: current.bodyLines.join('\n').trim() });
-      }
+      if (current) phases.push({ title: current.title, targetGoal: current.targetGoal, body: current.bodyLines.join('\n').trim() });
       const title = line.replace(/^##\s+/, '').trim();
-      if (!isPhaseHeading(title) && !phases.length && !goal) {
-        // This is the Goal heading — collect its body into goal string
-        current = { title: '', targetGoal: '', bodyLines: [] };
-      } else {
-        current = { title, targetGoal: '', bodyLines: [] };
-      }
+      current = (!isPhaseHeading(title) && !phases.length && !goal)
+        ? { title: '', targetGoal: '', bodyLines: [] }
+        : { title, targetGoal: '', bodyLines: [] };
     } else if (current) {
-      if (!current.title) {
-        // Collecting goal body lines
-        goal += (goal ? '\n' : '') + line;
-      } else {
-        const goalMatch = line.match(/\*{0,2}(?:Target Goal|الهدف المستهدف|الهدف التشغيلي|الهدف)[:\s*]+(.*)/i);
-        if (goalMatch) {
-          current.targetGoal = goalMatch[1].replace(/\*+/g, '').trim();
-        } else {
-          current.bodyLines.push(line);
-        }
+      if (!current.title) { goal += (goal ? '\n' : '') + line; }
+      else {
+        const m = line.match(/\*{0,2}(?:Target Goal|الهدف المستهدف|الهدف التشغيلي|الهدف)[:\s*]+(.*)/i);
+        if (m) current.targetGoal = m[1].replace(/\*+/g, '').trim();
+        else current.bodyLines.push(line);
       }
     }
   }
-  if (current?.title) {
-    phases.push({ title: current.title, targetGoal: current.targetGoal, body: current.bodyLines.join('\n').trim() });
-  }
-
-  return {
-    goal: goal.trim(),
-    phases: phases.filter(p => p.title && (p.body || p.targetGoal)),
-  };
+  if (current?.title) phases.push({ title: current.title, targetGoal: current.targetGoal, body: current.bodyLines.join('\n').trim() });
+  return { goal: goal.trim(), phases: phases.filter(p => p.title && (p.body || p.targetGoal)) };
 }
 
 function ActionPlanContent({ section }: { section: ReportSection }) {
-  const { goal, phases } = parseNarrative(section.narrative ?? '');
-  const hasPhases = phases.length >= 1;
+  const hasStructuredPhases = (section.phases?.length ?? 0) > 0;
+
+  // ── Structured path: use section.phases directly ─────────────────────────
+  if (hasStructuredPhases) {
+    return (
+      <div className="space-y-5" dir="rtl">
+        <ConclusionBadge conclusion={section.conclusion} />
+
+        {/* Visuals */}
+        {section.visuals.length > 0 && (
+          <div className="flex flex-col gap-4">
+            {section.visuals.map((visual, i) => (
+              <VisualRenderer key={i} visual={visual} />
+            ))}
+          </div>
+        )}
+
+        {/* Phases */}
+        <div className="space-y-4">
+          {section.phases!.map((phase, phaseIdx) => {
+            const pal = PHASE_PALETTE[phaseIdx % PHASE_PALETTE.length];
+
+            return (
+              <motion.div
+                key={phaseIdx}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3, delay: phaseIdx * 0.08 }}
+              >
+                <Card className="gap-0 py-0 overflow-hidden">
+
+                  {/* Phase header */}
+                  <CardHeader className={cn("border-b py-3 px-4", pal.headerBg)}>
+                    <div className="flex items-center gap-2">
+                      <div className={cn("size-5 rounded-full flex items-center justify-center shrink-0", pal.dot)}>
+                        <span className="text-[10px] font-bold text-white">{phaseIdx + 1}</span>
+                      </div>
+                      <CardTitle className="font-semibold leading-snug">{phase.title}</CardTitle>
+                    </div>
+                    <CardAction>
+                      <div className={cn("rounded-full px-2.5 py-0.5 text-xs font-medium", pal.badge)}>
+                        {phase.goal}
+                      </div>
+                    </CardAction>
+                  </CardHeader>
+
+                  {/* Tasks */}
+                  <CardContent className="p-0 divide-y divide-border">
+                    {phase.tasks.map((task, taskIdx) => (
+                      <div key={taskIdx} className={cn("px-4 py-3 border-r-2", pal.taskBorder)}>
+
+                        {/* Task title + duration */}
+                        <div className="flex items-center justify-between gap-3 mb-3">
+                          <span className="font-semibold">{task.title}</span>
+                          <span className={cn(
+                            "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium",
+                            pal.badge
+                          )}>
+                            <Clock className="size-3" />
+                            {task.duration}
+                          </span>
+                        </div>
+
+                        {/* Steps label */}
+                        <p className="text-muted-foreground mb-1.5">الخطوات</p>
+
+                        {/* Steps */}
+                        <ol className="space-y-1.5">
+                          {task.steps.map((step, stepIdx) => (
+                            <li key={stepIdx} className="flex items-start gap-2">
+                              <span className={cn(
+                                "mt-0.5 size-4 rounded-full flex items-center justify-center shrink-0 text-[10px] font-bold",
+                                pal.stepNum
+                              )}>
+                                {stepIdx + 1}
+                              </span>
+                              <p className="text-muted-foreground leading-snug">{step.text}</p>
+                            </li>
+                          ))}
+                        </ol>
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
+              </motion.div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  // ── Fallback path: backward-compat for old narrative-based reports ────────
+  const { goal, phases: legacyPhases } = parseNarrative(section.narrative ?? '');
+  const hasLegacyPhases = legacyPhases.length >= 1;
 
   return (
     <div className="space-y-5" dir="rtl">
       <ConclusionBadge conclusion={section.conclusion} />
 
-      {/* ── Visuals ── */}
       {section.visuals.length > 0 && (
         <div className="flex flex-col gap-4">
-          {section.visuals.map((visual, i) => (
-            <VisualRenderer key={i} visual={visual} />
-          ))}
+          {section.visuals.map((visual, i) => <VisualRenderer key={i} visual={visual} />)}
         </div>
       )}
 
-      {/* ── Goal banner ── */}
       {goal && (
         <div className="rounded-lg border bg-muted/30 px-4 py-3 space-y-2">
           <div className="flex items-center gap-2">
             <Target className="size-4 shrink-0 text-primary" />
-            <p className="text-sm font-bold">الهدف الرئيسي</p>
+            <p className="font-bold">الهدف الرئيسي</p>
           </div>
-          <div className="text-sm leading-relaxed text-muted-foreground [&_strong]:text-foreground [&_strong]:font-semibold [&_p]:m-0">
+          <div className="leading-relaxed text-muted-foreground [&_strong]:text-foreground [&_strong]:font-semibold [&_p]:m-0">
             <MessageResponse>{goal}</MessageResponse>
           </div>
         </div>
       )}
 
-      {/* ── Phase timeline ── */}
-      {hasPhases && (
+      {hasLegacyPhases && (
         <div className="relative">
-          {/* Vertical connector line on the right (RTL) */}
           <div className="absolute top-4 bottom-4 right-[11px] w-0.5 bg-border" />
-
           <div className="space-y-4">
-            {phases.map((phase, i) => {
-              const color = PHASE_COLORS[i % PHASE_COLORS.length];
+            {legacyPhases.map((phase, i) => {
+              const pal = PHASE_PALETTE[i % PHASE_PALETTE.length];
               return (
-                <motion.div
-                  key={i}
-                  initial={{ opacity: 0, x: 12 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ duration: 0.3, delay: i * 0.08 }}
-                  className="relative pr-8"
-                >
-                  {/* Timeline dot */}
-                  <div className="absolute right-0 top-4 size-[22px] rounded-full border-2 border-border bg-background flex items-center justify-center">
+                <motion.div key={i} initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.3, delay: i * 0.08 }} className="relative pr-8">
+                  <div className={cn("absolute right-0 top-4 size-[22px] rounded-full border-2 border-border bg-background flex items-center justify-center")}>
                     <span className="text-xs font-bold text-muted-foreground">{i + 1}</span>
                   </div>
-
                   <Card className="gap-0 py-0 overflow-hidden">
-                    <CardHeader className={cn("border-b pt-4 items-center", color.header)}>
+                    <CardHeader className={cn("border-b pt-4 items-center", pal.headerBg)}>
                       <CardTitle className="text-sm">{phase.title}</CardTitle>
-                      <CardAction>
-                        <Badge variant="outline" className="shrink-0">
-                          المرحلة {i + 1}
-                        </Badge>
-                      </CardAction>
+                      <CardAction><Badge variant="outline" className="shrink-0">المرحلة {i + 1}</Badge></CardAction>
                       {phase.targetGoal && (
-                        <CardDescription className="flex items-center gap-1">
-                          <Target className="size-3 shrink-0" />
-                          {phase.targetGoal}
-                        </CardDescription>
+                        <CardDescription className="flex items-center gap-1"><Target className="size-3 shrink-0" />{phase.targetGoal}</CardDescription>
                       )}
                     </CardHeader>
-
                     {phase.body && (
                       <CardContent>
-                        <div className="text-sm leading-relaxed [&_strong]:text-foreground [&_strong]:font-semibold [&_ol]:list-decimal [&_ol]:pr-4 [&_ul]:list-disc [&_ul]:pr-4 [&_li]:mt-1">
+                        <div className="leading-relaxed [&_strong]:text-foreground [&_strong]:font-semibold [&_ol]:list-decimal [&_ol]:pr-4 [&_ul]:list-disc [&_ul]:pr-4 [&_li]:mt-1">
                           <MessageResponse>{phase.body}</MessageResponse>
                         </div>
                       </CardContent>
@@ -342,8 +415,7 @@ function ActionPlanContent({ section }: { section: ReportSection }) {
         </div>
       )}
 
-      {/* ── Fallback: plain narrative if no phases could be parsed ── */}
-      {!hasPhases && section.narrative && (
+      {!hasLegacyPhases && section.narrative && (
         <NarrativeBlock markdown={section.narrative} />
       )}
     </div>
@@ -374,14 +446,26 @@ function SectionContent({ section }: { section: ReportSection }) {
 
 // ── Report View (Main) ─────────────────────────────────────────────────────
 
+// ── Placeholder tabs shown while report is generating ─────────────────────
+
+const PLACEHOLDER_TABS = [
+  { id: "financials",  label: "التحليل المالي" },
+  { id: "digital",     label: "الحضور الرقمي"  },
+  { id: "market",      label: "تحليل السوق"    },
+  { id: "action-plan", label: "خطة العمل"      },
+  { id: "performance", label: "مراقبة الأداء"  },
+];
+
 export function ReportView({
   manifest,
   isGenerating,
   businessName,
+  progressMessage,
 }: {
   manifest?: ReportManifest;
   isGenerating: boolean;
   businessName: string;
+  progressMessage?: string;
 }) {
   const sections = manifest?.sections ?? [];
 
@@ -395,12 +479,30 @@ export function ReportView({
 
   if (!manifest && isGenerating) {
     return (
-      <div className="flex flex-1 flex-col items-center justify-center px-8 py-16 text-center">
-        <div className="mb-6 flex size-16 items-center justify-center rounded-full border-2 border-primary/20 bg-primary/5">
-          <Loader2 className="size-8 animate-spin text-primary" />
+      <div className="flex flex-1 flex-col overflow-hidden">
+        {/* Disabled placeholder tab bar */}
+        <div className="px-4 py-2 pointer-events-none select-none opacity-40">
+          <div className="bg-muted rounded-lg p-[3px] flex items-center w-full justify-start h-auto flex-wrap gap-0.5">
+            {PLACEHOLDER_TABS.map((tab) => (
+              <div
+                key={tab.id}
+                className="inline-flex items-center gap-2 rounded-md px-2 py-1 text-sm font-medium text-muted-foreground"
+              >
+                <TabIcon sectionId={tab.id} />
+                {tab.label}
+              </div>
+            ))}
+          </div>
         </div>
-        <h2 className="mb-2 text-xl font-bold">جارٍ تحليل {businessName}</h2>
-        <p className="text-muted-foreground">يتم جمع البيانات وتحليلها…</p>
+
+        {/* Spinner + progress message */}
+        <div className="flex flex-1 flex-col items-center justify-center px-8 py-16 text-center">
+          <div className="mb-6 flex size-16 items-center justify-center rounded-full border-2 border-primary/20 bg-primary/5">
+            <Loader2 className="size-8 animate-spin text-primary" />
+          </div>
+          <h2 className="mb-2 text-xl font-bold">جارٍ تحليل {businessName}</h2>
+          <p className="text-muted-foreground">{progressMessage ?? "يتم جمع البيانات وتحليلها…"}</p>
+        </div>
       </div>
     );
   }

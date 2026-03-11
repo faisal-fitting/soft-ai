@@ -33,6 +33,11 @@ export const marketExpertAgent = new Agent({
 
     ${OUTPUT_FORMAT_GUIDE}
 
+    **Per-Section Strengths & Risks:**
+    Populate \`keyStrengths\` and \`keyRisks\` in your output based on your market domain analysis:
+    - \`keyStrengths\`: 2-3 specific market strengths (e.g., "أعلى تقييم في النطاق المحيط بـ 500 متر"). Concise, one-line, in Arabic.
+    - \`keyRisks\`: 2-3 specific market risks or weaknesses (e.g., "منافس جديد بتقييم 4.8 فتح قريباً"). Concise, one-line, in Arabic.
+
     **Deadline Format:**
     Output deadlines as relative strings (e.g., "2 weeks", "1 month", "Ongoing"). Do NOT output specific dates like "2024-07-15".
 

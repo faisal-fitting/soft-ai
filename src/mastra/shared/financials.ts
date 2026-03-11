@@ -82,6 +82,7 @@ export const financialOutputSchema = z.object({
   placeId: z.string(),
   instagramUser: z.string().optional(),
   tiktokUser: z.string().optional(),
+  threadId: z.string().optional().describe('Chat thread ID — passed through from workflow input for working memory'),
 
   // Computed KPIs
   netRevenue: z.number(),
@@ -121,10 +122,11 @@ function median(values: number[]): number {
 export type FinancialInput = z.infer<typeof financialInputSchema>;
 export type FinancialOutput = z.infer<typeof financialOutputSchema>;
 
-export function computeFinancials(input: FinancialInput): FinancialOutput {
+export function computeFinancials(input: FinancialInput & { threadId?: string }): FinancialOutput {
   const {
     businessName, businessType, placeId,
     instagramUser, tiktokUser,
+    threadId,
     sales, returns, advertising, discounts,
     productionStaffCosts,
     adminSalaries, adminExpenses, rent, utilities,
@@ -272,6 +274,7 @@ export function computeFinancials(input: FinancialInput): FinancialOutput {
     placeId,
     instagramUser,
     tiktokUser,
+    threadId,
     netRevenue,
     variableCosts,
     fixedCosts,

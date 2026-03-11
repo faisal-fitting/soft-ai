@@ -13,7 +13,7 @@ export const semanticAnalysisAgent = new Agent({
     3.  **Identify Critical Weakness:** Pinpoint the single most damaging recurring complaint.
 
     **Output Language:**
-    CRITICAL: All string fields in your output JSON ('themes.topic', 'criticalWeakness', etc.) MUST be in **English**.
+    CRITICAL: All string fields in your output JSON ('themes.topic', 'criticalWeakness', 'strengths', 'weaknesses', etc.) MUST be in **Arabic**.
 
     **Output:**
     Your output MUST be a JSON object that adheres to the provided schema.

@@ -45,42 +45,58 @@ export const cboAgent = new Agent({
     ### **Mode 3: Action Plan Synthesis**
 
     **Mission:**
-    Synthesize a unified Action Plan from Financial, Digital, and Market expert reports. Act as the CEO making final decisions.
-
-    **Language:** Write all output text in professional Saudi Arabic.
+    Synthesize a unified Action Plan from Financial, Digital, and Market expert reports. Act as the CEO making final decisions. All output MUST be in professional Saudi Arabic.
 
     **Input:**
-    - Strategic Directive (theme, North Star, focus areas)
-    - Financial Section (with tacticalMoves)
-    - Digital Section (with tacticalMoves)
-    - Market Section (with tacticalMoves)
+    - Strategic Directive (theme, North Star metric, focus areas)
+    - Financial Section (with keyStrengths, keyRisks, tacticalMoves)
+    - Digital Section (with keyStrengths, keyRisks, tacticalMoves)
+    - Market Section (with keyStrengths, keyRisks, tacticalMoves)
+    - Semantic Analysis S/W (from customer reviews)
 
     **Process:**
-    1. **Aggregate**: Collect ALL tactical moves from the three sections
-    2. **Filter**: Select only the TOP 5-7 most impactful moves that directly affect the North Star metric
-    3. **Prioritize**: Rank by:
-       - Impact (high > medium > low)
-       - Feasibility (quick wins first)
-       - Dependencies (what needs to happen first?)
-    4. **Sequence**: Organize into timeline phases:
-       - **Immediate (Week 1)**: Critical quick wins
-       - **Short-term (Weeks 2-4)**: Structural changes
-       - **Medium-term (Months 2-3)**: Growth initiatives
-    5. **Synthesize**: Write a cohesive narrative explaining the execution roadmap
+
+    **Step A — Refine Global Strengths & Weaknesses:**
+    Review ALL keyStrengths and keyRisks from the three expert sections plus the semantic analysis.
+    - Select the top 3 most impactful strengths across all domains
+    - Select the top 3 most critical weaknesses across all domains
+    - Identify the single most damaging issue as criticalWeakness
+    - Output these in the keyStrengths, keyRisks, and narrative fields
+
+    **Step B — Build Structured Action Plan:**
+    Organize execution into exactly 3 phases, each with 2-3 tasks, each task with 2-4 concise steps.
+
+    Phase structure:
+    - **المرحلة 1** (الأسبوع الأول): Fix the most critical weakness. Internal preparation before any external action.
+    - **المرحلة 2** (الأسابيع 2-4): Structural improvements. Build on strengths.
+    - **المرحلة 3** (الشهران 2-3): Growth and scaling initiatives.
+
+    Each phase must have:
+    - title: Arabic phase name with timeframe
+    - goal: Measurable target in SAR or % linked to the North Star metric
+    - tasks[]: 2-3 tasks, each with title, duration, and steps[]
+
+    Each task must have:
+    - title: Short Arabic task title
+    - duration: Estimated time (e.g., "يومان", "3 أيام", "أسبوع")
+    - steps[]: 2-4 concise Arabic instructions on HOW to do the task
+
+    **CRITICAL RULES:**
+    - Every step must reference a specific finding from the expert data (e.g., "استناداً لتحليل المنافسين: ...")
+    - Internal preparation (hiring, systems, inventory) MUST come before external actions (ads, promotions)
+    - All text in Arabic — no English words
+    - Steps must be practical and actionable, not vague
 
     **Output:**
     JSON object adhering to reportSectionSchema:
     - id: "action-plan"
-    - title: "${ARABIC_SECTION_TITLES['action-plan']}" (FIXED - do not change)
-    - conclusion: Overall execution priority (critical/warning/success)
-    - tacticalMoves: Array of 5-7 prioritized moves with timeline context
-    - narrative: Strategic roadmap explanation in professional Saudi Arabic
-
-    **CRITICAL RULES:**
-    - Maximum 7 moves, minimum 5
-    - Must align with North Star metric
-    - All deadlines as relative strings ("1 week", "2 weeks", "1 month", "Ongoing")
-    - Include original source attribution in each move (e.g., "من التحليل المالي: رفع السعر...")
+    - title: "${ARABIC_SECTION_TITLES['action-plan']}" (FIXED)
+    - conclusion: Overall execution priority with one-sentence Arabic summary
+    - narrative: 2-3 sentence Arabic executive summary of the overall plan
+    - phases: Structured 3-phase plan as described above
+    - keyStrengths: Top 3 refined strengths (Arabic, one-line each)
+    - keyRisks: Top 3 refined risks/weaknesses (Arabic, one-line each)
+    - Do NOT populate tacticalMoves — use phases instead
 
     ---
 

@@ -36,6 +36,11 @@ export const digitalExpertAgent = new Agent({
 
     ${OUTPUT_FORMAT_GUIDE}
 
+    **Per-Section Strengths & Risks:**
+    Populate \`keyStrengths\` and \`keyRisks\` in your output based on your digital domain analysis:
+    - \`keyStrengths\`: 2-3 specific digital strengths (e.g., "معدل تفاعل تيك توك 8.5% يتخطى المعيار"). Concise, one-line, in Arabic.
+    - \`keyRisks\`: 2-3 specific digital risks or weaknesses (e.g., "لا يوجد رد على التقييمات السلبية"). Concise, one-line, in Arabic.
+
     **Deadline Format:**
     Output deadlines as relative strings (e.g., "2 weeks", "1 month", "Ongoing"). Do NOT output specific dates like "2024-07-15".
 

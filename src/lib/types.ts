@@ -25,6 +25,26 @@ export type ReportVisual = {
   config?: Record<string, string | number | boolean | string[]>;
 };
 
+// ── Action Plan Types ─────────────────────────────────────────────────────────
+
+export type ActionPlanStep = {
+  text: string;
+};
+
+export type ActionPlanTask = {
+  title: string;
+  duration: string;
+  steps: ActionPlanStep[];
+};
+
+export type ActionPlanPhase = {
+  title: string;
+  goal: string;
+  tasks: ActionPlanTask[];
+};
+
+// ── Report Section ────────────────────────────────────────────────────────────
+
 export type ReportSection = {
   id: string;
   title: string;
@@ -37,7 +57,12 @@ export type ReportSection = {
     impact: "high" | "medium" | "low";
     deadline: string;
   }>;
+  keyStrengths?: string[];
+  keyRisks?: string[];
+  phases?: ActionPlanPhase[];
 };
+
+// ── Report Manifest ───────────────────────────────────────────────────────────
 
 export type ReportManifest = {
   metadata: {
@@ -50,6 +75,9 @@ export type ReportManifest = {
     rating?: number;
     reviewCount?: number;
     displayName?: string;
+    strengths?: string[];
+    weaknesses?: string[];
+    criticalWeakness?: string;
   };
   directive: {
     theme: string;

@@ -18,8 +18,10 @@ import {
   competitorReviewSummarySchema,
 } from '../shared/schemas';
 
-// Re-export for backwards compatibility
-export const workflowInputSchema = financialInputSchema;
+// Workflow input extends financial schema with optional orchestration metadata
+export const workflowInputSchema = financialInputSchema.extend({
+  threadId: z.string().optional().describe('Chat thread ID for working memory context — passed from the frontend'),
+});
 
 // ── Shared Schemas & Constants ────────────────────────────────────────────────
 
@@ -71,7 +73,7 @@ const RADIUS_MAP: Record<string, number> = {
 const collectFinancials = createStep({
   id: 'collect-financials',
   description: 'Compute deterministic financial KPIs',
-  inputSchema: financialInputSchema,
+  inputSchema: workflowInputSchema,
   outputSchema: financialOutputSchema,
   execute: async ({ inputData }) => computeFinancials(inputData),
 });
@@ -231,17 +233,14 @@ const generateStrategicDirective = createStep({
   description: 'Set the tone and North Star for the report',
   inputSchema: z.record(z.string(), z.any()),
   outputSchema: strategicDirectiveSchema,
-  execute: async ({ inputData, mastra, writer }) => {
+  execute: async ({ inputData, mastra, writer, getStepResult }) => {
     const agent = mastra?.getAgent('cboAgent');
     if (!agent) throw new Error('cboAgent not found');
-
-    const threadId = inputData.threadId || `studio-${Date.now()}`;
 
     await writer?.write({ type: 'data-step-progress', data: { step: 'directive', status: 'running', message: 'جاري تحليل الاستراتيجية...' } });
     const prompt = `Analyze this business and set the strategic directive:\n${JSON.stringify(inputData)}`;
     
     const response = await agent.generate(prompt, {
-      memory: { thread: threadId, resource: 'user' },
       structuredOutput: {
         schema: strategicDirectiveSchema,
         errorStrategy: 'fallback',
@@ -268,7 +267,6 @@ const generateFinancialSection = createStep({
   execute: async ({ inputData, mastra, writer }) => {
     await writer?.write({ type: 'data-step-progress', data: { step: 'financials', status: 'running', message: 'جاري تحليل الوضع المالي...' } });
     const agent = mastra?.getAgent('financialExpertAgent');
-    const threadId = (inputData.base as any)?.threadId;
     const prompt = `## Context
 You are a financial analyst specializing in Saudi F&B businesses.
 
@@ -309,24 +307,6 @@ Focus on profitability, break-even analysis, cost optimization, and menu enginee
         fallbackValue: { id: 'financials', title: 'Financial Performance', conclusion: { text: 'Financial analysis pending', severity: 'warning' }, visuals: [], narrative: 'Financial data is currently unavailable.' }
       }
     });
-    
-    // Update working memory with human-readable summary
-    if (threadId && agent) {
-      try {
-        const memory = await agent.getMemory(threadId);
-        const result = response.object;
-        const summary = `[الملخص المالي]
-- هامش الربح الإجمالي: ${(inputData.base as any)?.grossMargin?.toFixed(1) ?? 'N/A'}%
-- صافي الربح: ${(inputData.base as any)?.netProfit?.toFixed(0) ?? 'N/A'} ر.س
-- الإيرادات الصافية: ${(inputData.base as any)?.netRevenue?.toFixed(0) ?? 'N/A'} ر.س
-- التكاليف المتغيرة: ${(inputData.base as any)?.variableCosts?.toFixed(0) ?? 'N/A'} ر.س
-- التكاليف الثابتة: ${(inputData.base as any)?.fixedCosts?.toFixed(0) ?? 'N/A'} ر.س
-- حالة الربحية: ${(inputData.base as any)?.isAboveBreakEven ? 'مربح' : 'خاسر'}
-- النتيجة: ${result?.conclusion?.text ?? 'تحليل مالي'}`.slice(0, 1000);
-        
-        await memory?.updateWorkingMemory({ threadId, resource: 'user', workingMemory: summary });
-      } catch { /* ignore memory errors */ }
-    }
     
     await writer?.write({ type: 'data-step-progress', data: { step: 'financials', status: 'complete', message: 'تم تحليل الوضع المالي' } });
     return response.object;
@@ -451,79 +431,83 @@ const generateActionPlanSection = createStep({
     const agent = mastra?.getAgent('cboAgent');
     if (!agent) throw new Error('cboAgent not found');
 
-    const threadId = (inputData.base as any).threadId || `studio-${Date.now()}`;
+    const threadId: string | undefined = (inputData.base as any).threadId;
     
-    const prompt = `## Action Plan Synthesis
+    const semanticSW = {
+      strengths: (inputData.base as any).semanticAnalysis?.strengths ?? [],
+      weaknesses: (inputData.base as any).semanticAnalysis?.weaknesses ?? [],
+      criticalWeakness: (inputData.base as any).semanticAnalysis?.criticalWeakness ?? null,
+    };
 
-## Overall Goal (North Star)
+    const prompt = `## توليف خطة العمل
+
+## التوجه الاستراتيجي
 ${toYaml((inputData.base as any).directive)}
 
-## Input Analysis
-### Financial Data
-${toYaml(inputData.financials)}
+## نقاط القوة والضعف من المحللين المتخصصين
 
-### Digital/Social Data  
-${toYaml(inputData.digital)}
+### التحليل المالي
+- نقاط القوة: ${toYaml(inputData.financials.keyStrengths ?? [])}
+- نقاط الضعف: ${toYaml(inputData.financials.keyRisks ?? [])}
 
-### Market/Competitor Data
-${toYaml(inputData.market)}
+### التحليل الرقمي
+- نقاط القوة: ${toYaml(inputData.digital.keyStrengths ?? [])}
+- نقاط الضعف: ${toYaml(inputData.digital.keyRisks ?? [])}
 
-## Required Output Format
+### تحليل السوق
+- نقاط القوة: ${toYaml(inputData.market.keyStrengths ?? [])}
+- نقاط الضعف: ${toYaml(inputData.market.keyRisks ?? [])}
 
-**IMPORTANT: Follow this exact structure:**
+### التحليل الدلالي (من آراء العملاء)
+- نقاط القوة: ${toYaml(semanticSW.strengths)}
+- نقاط الضعف: ${toYaml(semanticSW.weaknesses)}
+- النقطة الحرجة: ${semanticSW.criticalWeakness ?? 'غير محدد'}
 
-## Goal
-[One sentence: The overall business objective]
-Example: Increase CSAT from 68 to 85, translating to +20% customer retention and +15% revenue
+## بيانات المحللين الكاملة
 
-## Phase 1: [Timeframe]
-**Target Goal:** +[X] SAR revenue (e.g., +30,000 SAR/month)
-**Steps:**
-1. **Prepare Tools:** [Internal - hire staff, inventory, setup systems]
-2. **Execute:** [External - advertise, based on [specific finding from analysis]]
-[Additional steps as needed]
+### البيانات المالية
+${toYaml({ conclusion: inputData.financials.conclusion, tacticalMoves: inputData.financials.tacticalMoves })}
 
-## Phase 2: [Timeframe]  
-**Target Goal:** +[X] SAR revenue
-**Steps:**
-1. **Prepare Tools:** [Internal preparations]
-2. **Execute:** [Based on [specific finding from analysis]]
-[Additional steps as needed]
+### البيانات الرقمية
+${toYaml({ conclusion: inputData.digital.conclusion, tacticalMoves: inputData.digital.tacticalMoves })}
 
-## Phase 3: [Timeframe]
-**Target Goal:** [Final milestone]
-**Steps:**
-1. **Prepare Tools:** [Internal]
-2. **Execute:** [Based on analysis]
+### بيانات السوق
+${toYaml({ conclusion: inputData.market.conclusion, tacticalMoves: inputData.market.tacticalMoves })}
 
-## Rules:
-1. **Internal before External:** All "prepare tools" steps (hiring, inventory, systems) MUST come BEFORE advertising/marketing steps
-2. **Link to Analysis:** Every execution step must reference a specific finding from the input data
-   - Example: "Launch Instagram ads featuring our cold brew (top performer per Digital Analysis)"
-   - Example: "Address competitor X's weak pricing on lattes by offering promotions"
-3. **Measurable:** Each step should have a metric or target
-4. **Maximum 7 total steps** across all phases
+## المطلوب منك:
 
-## tacticalMoves Format:
-List 5-7 top actions. Each must include:
-- Phase reference: "[Phase 1]", "[Phase 2]", "[Phase 3]"
-- Specific action with metric
-- Source: "From Financial/Digital/Market analysis"
+1. راجع كل نقاط القوة والضعف من جميع المصادر أعلاه.
+2. اختر أبرز 3 نقاط قوة حقيقية وأبرز 3 نقاط ضعف حرجة عبر كل المجالات — وضعها في keyStrengths وكeyRisks.
+3. حدد النقطة الحرجة الواحدة الأكثر ضرراً — ضعها كأول مهمة في المرحلة 1.
+4. ابنِ خطة عمل منظمة من 3 مراحل، كل مرحلة تحتوي على 2-3 مهام، وكل مهمة تحتوي على 2-4 خطوات عملية.
+5. كل خطوة يجب أن تستند لبيانات محددة من التحليل أعلاه.
+6. الداخلي (تجهيز، توظيف، أنظمة) قبل الخارجي (إعلانات، ترويج) في كل مرحلة.
 `;
     
+    // Use threadId if available; otherwise generate a throwaway for working memory
+    const memoryThreadId = threadId ?? `workflow-${Date.now()}`;
+
+    // Create thread if it doesn't exist yet (required before updating working memory)
+    const mem = await agent.getMemory();
+    if (mem) {
+      try { await mem.createThread({ resourceId: 'user', threadId: memoryThreadId }); } catch { /* ignore if already exists */ }
+    }
+
     const response = await agent.generate(prompt, {
       prepareStep: () => ({ model: 'openrouter/google/gemini-3.1-pro-preview' }),
-      memory: { thread: threadId, resource: 'user' },
+      // No memory option — don't write to thread history, use working memory for context
       structuredOutput: {
         schema: reportSectionSchema,
         errorStrategy: 'fallback',
         fallbackValue: { 
           id: 'action-plan', 
-          title: 'Action Plan', 
-          conclusion: { text: 'Action plan synthesis failed', severity: 'warning' }, 
+          title: 'خطة العمل', 
+          conclusion: { text: 'لم يتمكن النظام من إنشاء خطة العمل', severity: 'warning' as const }, 
           visuals: [], 
-          narrative: 'Could not generate action plan.',
-          tacticalMoves: []
+          narrative: 'حدث خطأ أثناء إنشاء خطة العمل.',
+          phases: [],
+          keyStrengths: [],
+          keyRisks: [],
         }
       }
     });
@@ -532,6 +516,44 @@ List 5-7 top actions. Each must include:
       type: 'data-step-progress', 
       data: { step: 'action-plan', status: 'complete', message: 'تم بناء خطة العمل' } 
     });
+
+    // Update CBO agent working memory with a compact report summary.
+    // Done here — at the final agent step — where all data is available.
+    // Only runs when a real threadId was passed (chat session exists).
+    if (threadId) {
+      try {
+        const memory = await agent.getMemory();
+        const result = response.object ?? {};
+        const directive = (inputData.base as any).directive;
+        const base = inputData.base;
+
+        const summary = [
+          `[ملخص التقرير]`,
+          `الاسم: ${base.businessName} | النوع: ${base.businessType}`,
+          `النجم الشمالي: ${directive?.northStarMetric?.name} — الحالي: ${directive?.northStarMetric?.value} — الهدف: ${directive?.northStarMetric?.target}`,
+          `الحالة العامة: ${directive?.overallStatus} | الثيم: ${directive?.theme}`,
+          ``,
+          `[الوضع المالي] ${inputData.financials.conclusion?.text}`,
+          `  إيرادات: ${base.netRevenue?.toFixed(0)} | صافي ربح: ${base.netProfit?.toFixed(0)} | هامش: ${base.grossMargin?.toFixed(1)}%`,
+          ``,
+          `[الرقمي] ${inputData.digital.conclusion?.text}`,
+          ``,
+          `[السوق] ${inputData.market.conclusion?.text}`,
+          ``,
+          `[نقاط القوة] ${((result as any).keyStrengths ?? []).join(' | ')}`,
+          `[نقاط الضعف] ${((result as any).keyRisks ?? []).join(' | ')}`,
+          ``,
+          `[خطة العمل] ${(result as any).conclusion?.text ?? ''}`,
+          `المراحل: ${((result as any).phases ?? []).map((p: any) => `${p.title} (${p.goal})`).join(' → ')}`,
+        ].join('\n').slice(0, 1500);
+
+        await memory?.updateWorkingMemory({
+          threadId: memoryThreadId,
+          resourceId: 'user',
+          workingMemory: summary,
+        });
+      } catch { /* memory update is best-effort — never block the workflow */ }
+    }
     
     return response.object;
   },
@@ -551,7 +573,7 @@ const ARABIC_SECTION_TITLES: Record<string, string> = {
 
 export const businessAnalysisWorkflow = createWorkflow({
   id: 'business-analysis-workflow',
-  inputSchema: financialInputSchema,
+  inputSchema: workflowInputSchema,
   outputSchema: reportManifestSchema,
 })
   .then(collectFinancials)
@@ -619,6 +641,10 @@ export const businessAnalysisWorkflow = createWorkflow({
         rating: expertOutput.base.placeDetails?.rating,
         reviewCount: expertOutput.base.placeDetails?.userRatingCount,
         displayName: expertOutput.base.placeDetails?.displayName?.text,
+        // CBO-refined global S/W — sourced from the action plan step output
+        strengths: actionPlan.keyStrengths,
+        weaknesses: actionPlan.keyRisks,
+        criticalWeakness: actionPlan.keyRisks?.[0],
       },
       directive: expertOutput.base.directive,
       sections: [

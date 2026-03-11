@@ -3,11 +3,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useChat } from "@ai-sdk/react";
-import { DefaultChatTransport, type UIMessage } from "ai";
+import { DefaultChatTransport } from "ai";
 import { motion, AnimatePresence } from "motion/react";
 import { Loader2, XCircle } from "lucide-react";
 
-import { getThreadMessages, getWorkflowRun, saveThreadTitle } from "@/app/actions";
+import { getWorkflowRun, saveThreadTitle } from "@/app/actions";
 import { useReportStore } from "@/store/report-store";
 import { BusinessSidebar } from "@/components/business-sidebar";
 import { ChatSidebar } from "@/components/chat-sidebar";
@@ -27,18 +27,13 @@ export function ReportSession({ sessionKey, urlRunId }: Props) {
   const phase = store.phase;
   const businessName = store.businessName;
 
-  const [threadId] = useState<string>(() => {
-    if (typeof window === "undefined") return crypto.randomUUID();
-    return store.threadId ?? crypto.randomUUID();
-  });
-
   const [manifest, setManifest] = useState<ReportManifest | null>(null);
   const [workflowProgress, setWorkflowProgress] = useState<StepProgress | null>(null);
   const [loadingHistory, setLoadingHistory] = useState(true);
   const [restoreError, setRestoreError] = useState<string | null>(null);
 
   const pendingFormData = useRef<FinancialFormData | null>(null);
-  const pendingThreadId = useRef<string>(threadId);
+  const pendingThreadId = useRef<string | null>(null);
 
   // ── Workflow transport ─────────────────────────────────────────────────────
   const workflowTransport = useMemo(
@@ -46,7 +41,7 @@ export function ReportSession({ sessionKey, urlRunId }: Props) {
       new DefaultChatTransport({
         api: "/api/report/stream",
         prepareSendMessagesRequest: () => ({
-          body: { inputData: pendingFormData.current },
+          body: { inputData: { ...pendingFormData.current, threadId: pendingThreadId.current } },
         }),
       }),
     []
@@ -56,87 +51,72 @@ export function ReportSession({ sessionKey, urlRunId }: Props) {
     transport: workflowTransport,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     onData: (part: any) => {
+      console.log("[workflow:onData]", part.type, part.data?.status ?? "");
+
       if (part.type === "data-step-progress") {
         setWorkflowProgress(part.data as StepProgress);
       }
+
       if (part.type === "data-workflow") {
         if (part.id && !store.runId) {
-          store.startReport(part.id, pendingThreadId.current, pendingFormData.current?.businessName ?? "");
+          store.startReport(part.id, pendingThreadId.current!, pendingFormData.current?.businessName ?? "");
           router.replace(`/?run=${part.id}`, { scroll: false } as any);
         }
-        const output = part.data?.output;
-        if (output && part.data?.status === "success") {
-          const candidate = output.metadata ? output : output.result;
-          if (candidate?.metadata && candidate?.directive && candidate?.sections) {
-            setManifest(candidate as ReportManifest);
+
+        if (part.data?.status === "success") {
+          const manifest = part.data?.steps?.["assemble-manifest"]?.output;
+          console.log("[workflow:finish] step keys:", part.data?.steps ? Object.keys(part.data.steps) : null);
+          console.log("[workflow:finish] manifest keys:", manifest ? Object.keys(manifest) : "not found");
+
+          if (manifest?.metadata && manifest?.directive && manifest?.sections) {
+            console.log("[workflow:finish] manifest valid — rendering report");
+            setManifest(manifest as ReportManifest);
             setWorkflowProgress(null);
+          } else {
+            console.warn("[workflow:finish] manifest shape invalid", manifest);
           }
         }
       }
     },
     onFinish: ({ isError }: { isError?: boolean }) => {
+      console.log("[workflow:onFinish]", { isError });
       if (isError) console.error("[workflow] stream ended with error");
       setWorkflowProgress(null);
     },
     onError: (err: unknown) => console.error("[workflow:error]", err),
   });
 
-  // ── Chat transport ─────────────────────────────────────────────────────────
-  const chatTransport = useMemo(
-    () =>
-      new DefaultChatTransport({
-        api: "/api/chat",
-        body: { threadId, resourceId: "user" },
-      }),
-    [threadId]
-  );
-
-  const { messages, sendMessage, status, stop, setMessages } = useChat({
-    transport: chatTransport,
-    onError: (err: unknown) => console.error("[chat:error]", err),
-  });
-
-  // ── Restore manifest + chat history on mount ───────────────────────────────
-  // Priority: urlRunId > store.runId > nothing (show form)
+  // ── Restore manifest on mount ────────────────────────────────────────────────
   useEffect(() => {
-    const { runId: storedRunId, threadId: storedThreadId } = useReportStore.getState();
-    const resolvedRunId = urlRunId || storedRunId;
-
-    // No run to restore — show the form
-    if (!resolvedRunId) {
+    // Only restore from URL param — no URL param means show the form
+    if (!urlRunId) {
+      store.reset();
       setLoadingHistory(false);
       return;
     }
 
-    Promise.all([
-      getWorkflowRun(resolvedRunId),
-      storedThreadId ? getThreadMessages(storedThreadId) : Promise.resolve([]),
-    ])
-      .then(([restoredManifest, msgs]) => {
+    getWorkflowRun(urlRunId)
+      .then((restoredManifest) => {
         if (restoredManifest) {
           setManifest(restoredManifest);
           if (!store.phase || store.phase === "form") {
-            store.startReport(resolvedRunId, storedThreadId ?? threadId, store.businessName ?? "");
+            store.startReport(urlRunId, store.threadId ?? "", store.businessName ?? "");
           }
-        } else if (urlRunId) {
-          // URL had a runId but nothing was found
+        } else {
           setRestoreError(urlRunId);
         }
-        if (msgs.length > 0) setMessages(msgs as UIMessage[]);
         setLoadingHistory(false);
       })
       .catch((err: unknown) => {
         console.error("[ReportSession] restore failed:", err);
-        if (urlRunId) setRestoreError(urlRunId);
+        setRestoreError(urlRunId);
         setLoadingHistory(false);
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const workflowRunning = workflowStatus === "submitted" || workflowStatus === "streaming";
-  const isGenerating = workflowRunning || status === "submitted" || status === "streaming";
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const hasReport = !!manifest || messages.some((m: any) => m.role === "assistant");
+  const hasReport = !!manifest;
 
   const handleFormSubmit = useCallback(
     async (data: FinancialFormData) => {
@@ -150,15 +130,6 @@ export function ReportSession({ sessionKey, urlRunId }: Props) {
     [store, workflowSend]
   );
 
-  const handleSend = useCallback(
-    async (text: string) => {
-      await sendMessage({ text });
-    },
-    [sendMessage]
-  );
-
-  // showProgress is true from the moment the workflow starts (workflowRunning)
-  // until the manifest arrives — prevents flashing "no report yet" on first load.
   const showProgress = (workflowRunning || !!workflowProgress) && !manifest;
 
   if (loadingHistory) {
@@ -195,22 +166,13 @@ export function ReportSession({ sessionKey, urlRunId }: Props) {
   }
 
   return (
-    // Single SidebarProvider wrapping both sidebars + SidebarInset (sidebar-15 pattern).
-    // BusinessSidebar (left/start in RTL) → SidebarInset (main content) → ChatSidebar (right/end in RTL).
-    // Both sidebars are collapsible="none" (persistent, no collapse) so they stay inline.
-    // --sidebar-width here is for BusinessSidebar; ChatSidebar overrides to 20rem via its own style.
     <SidebarProvider
       defaultOpen={hasReport}
       style={{ "--sidebar-width": "16rem" } as React.CSSProperties}
       className="min-h-0 overflow-hidden"
     >
-      {/* Business profile sidebar — start side (left in RTL) */}
-      <BusinessSidebar
-        manifest={manifest}
-        isGenerating={isGenerating}
-      />
+      <BusinessSidebar manifest={manifest} isGenerating={workflowRunning} />
 
-      {/* Main content area — constrained between the two sidebars */}
       <SidebarInset className="overflow-hidden">
         <AnimatePresence mode="wait">
           {phase === "form" ? (
@@ -233,35 +195,18 @@ export function ReportSession({ sessionKey, urlRunId }: Props) {
               exit={{ opacity: 0 }}
               transition={{ duration: 0.3 }}
             >
-              {showProgress ? (
-                <div className="flex flex-1 flex-col items-center justify-center p-8">
-                  <div className="mb-6 flex size-16 items-center justify-center rounded-full border-2 border-primary/20 bg-primary/5">
-                    <Loader2 className="size-8 animate-spin text-primary" />
-                  </div>
-                  <h2 className="mb-2 text-xl font-bold">جاري تحليل {businessName}</h2>
-                  <p className="text-sm text-muted-foreground">{workflowProgress?.message}</p>
-                </div>
-              ) : (
-                <ReportView
-                  manifest={manifest ?? undefined}
-                  isGenerating={showProgress}
-                  businessName={businessName ?? ""}
-                />
-              )}
+              <ReportView
+                manifest={manifest ?? undefined}
+                isGenerating={showProgress}
+                businessName={businessName ?? ""}
+                progressMessage={workflowProgress?.message}
+              />
             </motion.div>
           )}
         </AnimatePresence>
       </SidebarInset>
 
-      {/* Chat sidebar — end side (right in RTL) */}
-      <ChatSidebar
-        messages={messages}
-        status={status}
-        businessName={businessName}
-        hasReport={hasReport}
-        onSend={handleSend}
-        onStop={stop}
-      />
+      <ChatSidebar businessName={businessName} hasReport={hasReport} />
     </SidebarProvider>
   );
 }

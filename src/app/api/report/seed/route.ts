@@ -29,6 +29,7 @@ export async function POST(req: Request) {
 
   await memory.updateWorkingMemory({
     threadId,
+    
     resourceId: resourceId || 'user',
     workingMemory: `[سياق] هذا تقرير تحليل الأعمال (JSON):
 

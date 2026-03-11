@@ -165,14 +165,14 @@ export const competitorAnalysisSchema = z.object({
 export const semanticAnalysisOutputSchema = z.object({
   sentimentScore: z.number().min(0).max(100).describe('Overall sentiment score 0-100, where 0=extremely negative, 50=neutral, 100=extremely positive'),
   themes: z.array(z.object({
-    topic: z.string().describe('Theme topic in English, e.g. "Coffee Quality", "Service Speed"'),
+    topic: z.string().describe('Theme topic in Arabic, e.g. "جودة القهوة", "سرعة الخدمة"'),
     sentiment: z.enum(['positive', 'negative', 'neutral']).describe('Dominant sentiment for this theme'),
     mentions: z.number().describe('Number of reviews mentioning this theme'),
     exampleSnippets: z.array(z.string()).describe('2-3 verbatim review snippets that best illustrate this theme'),
   })).describe('Recurring themes found in reviews (only themes appearing in ≥15% of reviews)'),
-  criticalWeakness: z.string().optional().describe('Markdown description of the single most damaging recurring complaint — the one that most hurts customer satisfaction'),
-  strengths: z.array(z.string()).optional().describe('Top 3 business strengths identified from positive review themes'),
-  weaknesses: z.array(z.string()).optional().describe('Top 3 business weaknesses identified from negative review themes'),
+  criticalWeakness: z.string().optional().describe('The single most damaging recurring complaint in Arabic — the one that most hurts customer satisfaction'),
+  strengths: z.array(z.string()).optional().describe('Top 3 business strengths in Arabic, identified from positive review themes'),
+  weaknesses: z.array(z.string()).optional().describe('Top 3 business weaknesses in Arabic, identified from negative review themes'),
 });
 
 export const topContentSchema = z.object({
@@ -248,6 +248,24 @@ When populating the \`narrative\` field in the JSON response, you MUST adhere to
 </examples>
 `;
 
+// ── Action Plan Structured Schemas ───────────────────────────────────────────
+
+export const actionPlanStepSchema = z.object({
+  text: z.string().describe('Concise, practical Arabic instruction for this step'),
+});
+
+export const actionPlanTaskSchema = z.object({
+  title: z.string().describe('Task title in Arabic'),
+  duration: z.string().describe('Estimated duration, e.g. "3 أيام", "أسبوع"'),
+  steps: z.array(actionPlanStepSchema).describe('Practical steps to complete this task'),
+});
+
+export const actionPlanPhaseSchema = z.object({
+  title: z.string().describe('Phase title in Arabic, e.g. "المرحلة 1: التأسيس"'),
+  goal: z.string().describe('Target goal for this phase, e.g. "+30,000 ريال/شهر"'),
+  tasks: z.array(actionPlanTaskSchema).describe('2-3 tasks to complete this phase'),
+});
+
 export const visualTypeSchema = z.enum([
   'bar-chart',
   'line-chart',
@@ -288,6 +306,9 @@ export const reportSectionSchema = z.object({
     impact: z.enum(['high', 'medium', 'low']).describe('Business impact level'),
     deadline: z.string().describe('Relative deadline string, e.g. "1 week", "2 weeks", "1 month", "Ongoing"'),
   })).optional().describe('Prioritized list of tactical actions derived from this section\'s analysis'),
+  keyStrengths: z.array(z.string()).optional().describe('2-3 domain-specific strengths discovered in this section (Arabic)'),
+  keyRisks: z.array(z.string()).optional().describe('2-3 domain-specific risks or weaknesses discovered in this section (Arabic)'),
+  phases: z.array(actionPlanPhaseSchema).optional().describe('Structured action plan phases — only populated for the action-plan section'),
 });
 
 export const strategicDirectiveSchema = z.object({
@@ -317,6 +338,9 @@ export const reportManifestSchema = z.object({
     rating: z.number().optional(),
     reviewCount: z.number().optional(),
     displayName: z.string().optional(),
+    strengths: z.array(z.string()).optional().describe('Top business strengths — refined and selected by CBO agent'),
+    weaknesses: z.array(z.string()).optional().describe('Top business weaknesses — refined and selected by CBO agent'),
+    criticalWeakness: z.string().optional().describe('Single most damaging issue — refined by CBO agent'),
   }),
   directive: strategicDirectiveSchema,
   sections: z.array(reportSectionSchema),
