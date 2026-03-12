@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { motion } from "motion/react";
 import {
   PlusIcon,
@@ -11,7 +11,9 @@ import {
   Upload,
   Layers2,
   Combine,
+  Copy,
 } from "lucide-react";
+import { z } from "zod";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -37,39 +39,34 @@ import {
   ComboboxItem,
   ComboboxList,
 } from "@/components/ui/combobox";
+import { financialInputSchema, itemInputSchema } from "@/mastra/shared/financials";
 
-// ── Types ────────────────────────────────────────────────────────────────────
+// ── Types — derived from Zod schemas (single source of truth) ────────────────
 
-export interface MenuItemInput {
-  name: string;
-  sellingPrice: number;
-  soldUnits: number;
-  rawMaterialCostPerUnit?: number;
-  packagingCostPerUnit?: number;
-  totalCostPerUnit?: number;
-  dailyProductionCapacity?: number;
+export type MenuItemInput = z.infer<typeof itemInputSchema>;
+export type FinancialFormData = z.infer<typeof financialInputSchema>;
+
+// ── Draft persistence ─────────────────────────────────────────────────────────
+
+const DRAFT_KEY = "cbo-form-draft";
+
+function saveDraft(data: FinancialFormData) {
+  try { localStorage.setItem(DRAFT_KEY, JSON.stringify(data)); } catch { /* silent */ }
 }
 
-export interface FinancialFormData {
-  businessName: string;
-  businessType: "cafe" | "restaurant" | "cloud_kitchen" | "fine_dining";
-  placeId: string;
-  instagramUser: string;
-  tiktokUser: string;
-  sales: number;
-  returns: number;
-  advertising: number;
-  discounts: number;
-  productionStaffCosts: number;
-  adminSalaries: number;
-  adminExpenses: number;
-  rent: number;
-  utilities: number;
-  subscriptions: number;
-  govFees: number;
-  serviceLaborCosts: number;
-  otherCosts: number;
-  items: MenuItemInput[];
+function loadDraft(): FinancialFormData | null {
+  try {
+    const raw = localStorage.getItem(DRAFT_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    // Validate shape loosely — if it has businessName it's a valid draft
+    if (typeof parsed?.businessName === "string") return parsed as FinancialFormData;
+    return null;
+  } catch { return null; }
+}
+
+function clearDraft() {
+  try { localStorage.removeItem(DRAFT_KEY); } catch { /* silent */ }
 }
 
 // ── Prompt Builder ───────────────────────────────────────────────────────────
@@ -90,19 +87,22 @@ ${JSON.stringify(data, null, 2)}
 function Field({
   label,
   sublabel,
+  error,
   children,
 }: {
   label: string;
   sublabel?: string;
+  error?: string;
   children: React.ReactNode;
 }) {
   return (
     <div className="space-y-1.5">
       <label className="text-sm font-medium leading-none">{label}</label>
       {sublabel && (
-        <p className="text-[11px] text-muted-foreground">{sublabel}</p>
+        <p className="text-muted-foreground">{sublabel}</p>
       )}
       {children}
+      {error && <p className="text-destructive">{error}</p>}
     </div>
   );
 }
@@ -111,10 +111,12 @@ function NumericInput({
   value,
   onChange,
   placeholder = "0",
+  error,
 }: {
   value?: number;
   onChange: (v: number) => void;
   placeholder?: string;
+  error?: boolean;
 }) {
   return (
     <Input
@@ -124,7 +126,7 @@ function NumericInput({
       value={value === undefined || value === 0 ? "" : value}
       placeholder={placeholder}
       onChange={(e) => onChange(parseFloat(e.target.value) || 0)}
-      className="tabular-nums"
+      className={cn("tabular-nums", error && "border-destructive focus-visible:ring-destructive")}
     />
   );
 }
@@ -152,10 +154,8 @@ function PlaceAutocomplete({
   const [suggestions, setSuggestions] = useState<PlaceSuggestion[]>([]);
   const [loading, setLoading] = useState(false);
   const [resetKey, setResetKey] = useState(0);
-  // Prevents the post-selection onInputValueChange from triggering a new fetch
   const skipNextQuery = useRef(false);
 
-  // Debounce fetch driven by `query`
   useEffect(() => {
     if (!query.trim()) { setSuggestions([]); return; }
     const t = setTimeout(async () => {
@@ -167,16 +167,12 @@ function PlaceAutocomplete({
           body: JSON.stringify({ input: query }),
         });
         setSuggestions((await res.json()).suggestions ?? []);
-      } catch {
-        // silent fail
-      } finally {
-        setLoading(false);
-      }
+      } catch { /* silent */ }
+      finally { setLoading(false); }
     }, 350);
     return () => clearTimeout(t);
   }, [query]);
 
-  // External clear → remount the combobox to reset its internal state
   useEffect(() => {
     if (!placeId) {
       setResetKey((k) => k + 1);
@@ -186,10 +182,7 @@ function PlaceAutocomplete({
   }, [placeId]);
 
   const handleInputValueChange = (v: string) => {
-    if (skipNextQuery.current) {
-      skipNextQuery.current = false;
-      return;
-    }
+    if (skipNextQuery.current) { skipNextQuery.current = false; return; }
     setQuery(v);
   };
 
@@ -197,10 +190,8 @@ function PlaceAutocomplete({
     if (s) {
       skipNextQuery.current = true;
       setSuggestions([]);
-      const name = s.placePrediction.structuredFormat.mainText.text;
-      onSelect(s.placePrediction.placeId, name);
+      onSelect(s.placePrediction.placeId, s.placePrediction.structuredFormat.mainText.text);
     } else {
-      // Cleared via the built-in clear button
       setQuery("");
       setSuggestions([]);
       onSelect("", "");
@@ -214,9 +205,7 @@ function PlaceAutocomplete({
         items={suggestions}
         onInputValueChange={handleInputValueChange}
         onValueChange={handleValueChange}
-        itemToStringLabel={(s: PlaceSuggestion) =>
-          s.placePrediction.structuredFormat.mainText.text
-        }
+        itemToStringLabel={(s: PlaceSuggestion) => s.placePrediction.structuredFormat.mainText.text}
         isItemEqualToValue={(a: PlaceSuggestion, b: PlaceSuggestion) =>
           a.placePrediction.placeId === b.placePrediction.placeId
         }
@@ -241,17 +230,36 @@ function PlaceAutocomplete({
           </ComboboxList>
         </ComboboxContent>
       </Combobox>
-
       {placeId && (
-        <p className="mt-1 truncate font-mono text-[10px] text-muted-foreground" dir="ltr">
-          {placeId}
-        </p>
+        <p className="mt-1 truncate font-mono text-muted-foreground" dir="ltr">{placeId}</p>
       )}
     </div>
   );
 }
 
-// ── Default empty item ────────────────────────────────────────────────────────
+// ── Default state ─────────────────────────────────────────────────────────────
+
+const DEFAULT_DATA: FinancialFormData = {
+  businessName: "",
+  businessType: "cafe",
+  placeId: "",
+  instagramUser: undefined,
+  tiktokUser: undefined,
+  sales: 0,
+  returns: 0,
+  advertising: 0,
+  discounts: 0,
+  productionStaffCosts: 0,
+  adminSalaries: 0,
+  adminExpenses: 0,
+  rent: 0,
+  utilities: 0,
+  subscriptions: 0,
+  govFees: 0,
+  serviceLaborCosts: 0,
+  otherCosts: 0,
+  items: [],
+};
 
 const newItem = (): MenuItemInput => ({
   name: "",
@@ -272,78 +280,73 @@ interface Props {
 
 export function BusinessForm({ onSubmit, isSubmitting }: Props) {
   const [tab, setTab] = useState("info");
-  const [data, setData] = useState<FinancialFormData>({
-    businessName: "",
-    businessType: "cafe",
-    placeId: "",
-    instagramUser: "",
-    tiktokUser: "",
-    sales: 0,
-    returns: 0,
-    advertising: 0,
-    discounts: 0,
-    productionStaffCosts: 0,
-    adminSalaries: 0,
-    adminExpenses: 0,
-    rent: 0,
-    utilities: 0,
-    subscriptions: 0,
-    govFees: 0,
-    serviceLaborCosts: 0,
-    otherCosts: 0,
-    items: [],
-  });
 
-  // Track collapsed state per item (true = collapsed)
+  // ── State — restore from draft on mount ──────────────────────────────────
+  const [data, setData] = useState<FinancialFormData>(() => loadDraft() ?? DEFAULT_DATA);
   const [collapsed, setCollapsed] = useState<boolean[]>([]);
-
-  // Track cost mode per item ("detailed" | "total")
   const [costModes, setCostModes] = useState<Array<"detailed" | "total">>([]);
 
-  // Validate items for unrealistic costs
-  const validateItems = (items: MenuItemInput[]) => {
-    const warnings: string[] = [];
-    items.forEach((item, i) => {
-      if (!item.name.trim()) return;
-      const cost = item.totalCostPerUnit ?? item.rawMaterialCostPerUnit ?? 0;
-      if (item.sellingPrice > 0 && cost > item.sellingPrice * 0.8) {
-        warnings.push(`المنتج "${item.name}": التكلفة مرتفعة جداً (${cost.toFixed(2)} ر.س مقابل سعر ${item.sellingPrice.toFixed(2)} ر.س)`);
-      }
-      if (item.sellingPrice === 0 && cost > 0) {
-        warnings.push(`المنتج "${item.name}": السعر يجب أن يكون أكبر من صفر`);
-      }
+  // Sync collapsed/costModes length with items on mount (when restoring a draft)
+  useEffect(() => {
+    setCollapsed((c) => {
+      if (c.length === data.items.length) return c;
+      return data.items.map((_, i) => c[i] ?? true); // restored items collapsed
     });
-    return warnings;
-  };
+    setCostModes((m) => {
+      if (m.length === data.items.length) return m;
+      return data.items.map((item, i) => {
+        if (m[i]) return m[i];
+        return item.totalCostPerUnit !== undefined ? "total" : "detailed";
+      });
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // run once on mount only
 
-  const costWarnings = validateItems(data.items);
+  // ── Draft auto-save (debounced 500ms) ────────────────────────────────────
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => saveDraft(data), 500);
+    return () => { if (saveTimer.current) clearTimeout(saveTimer.current); };
+  }, [data]);
 
-  // File input ref for Excel import
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  // ── Helpers ───────────────────────────────────────────────────────────────
+  const set = useCallback(<K extends keyof FinancialFormData>(key: K, value: FinancialFormData[K]) => {
+    setData((d) => ({ ...d, [key]: value }));
+  }, []);
 
-  const set = <K extends keyof FinancialFormData>(
-    key: K,
-    value: FinancialFormData[K]
-  ) => setData((d) => ({ ...d, [key]: value }));
-
-  const setItem = (index: number, key: keyof MenuItemInput, value: string | number | undefined) =>
+  const setItem = useCallback((index: number, key: keyof MenuItemInput, value: string | number | undefined) => {
     setData((d) => {
       const items = [...d.items];
       items[index] = { ...items[index], [key]: value };
       return { ...d, items };
     });
+  }, []);
 
-  const addItem = () => {
+  const addItem = useCallback(() => {
     setData((d) => ({ ...d, items: [...d.items, newItem()] }));
-    setCollapsed((c) => [...c, false]); // new item starts expanded so user can fill it in
+    setCollapsed((c) => [...c, false]);
     setCostModes((m) => [...m, "detailed"]);
-  };
+  }, []);
 
-  const removeItem = (i: number) => {
+  const duplicateItem = useCallback((i: number) => {
+    setData((d) => {
+      const items = [...d.items];
+      items.splice(i + 1, 0, { ...items[i] });
+      return { ...d, items };
+    });
+    setCollapsed((c) => { const n = [...c]; n.splice(i + 1, 0, false); return n; });
+    setCostModes((m) => { const n = [...m]; n.splice(i + 1, 0, m[i]); return n; });
+  }, []);
+
+  const removeItem = useCallback((i: number) => {
     setData((d) => ({ ...d, items: d.items.filter((_, idx) => idx !== i) }));
     setCollapsed((c) => c.filter((_, idx) => idx !== i));
     setCostModes((m) => m.filter((_, idx) => idx !== i));
-  };
+  }, []);
+
+  // ── Excel import ──────────────────────────────────────────────────────────
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleExcelImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -355,12 +358,12 @@ export function BusinessForm({ onSubmit, isSubmitting }: Props) {
     const rows = utils.sheet_to_json<Record<string, unknown>>(ws);
 
     const COLUMNS: Record<string, keyof MenuItemInput> = {
-      "اسم المنتج":             "name",
-      "سعر البيع":              "sellingPrice",
-      "وحدات مباعة شهرياً":    "soldUnits",
-      "تكلفة مواد خام":         "rawMaterialCostPerUnit",
-      "تكلفة تغليف":            "packagingCostPerUnit",
-      "طاقة إنتاجية يومية":    "dailyProductionCapacity",
+      "اسم المنتج":           "name",
+      "سعر البيع":            "sellingPrice",
+      "وحدات مباعة شهرياً":  "soldUnits",
+      "تكلفة مواد خام":       "rawMaterialCostPerUnit",
+      "تكلفة تغليف":          "packagingCostPerUnit",
+      "طاقة إنتاجية يومية":  "dailyProductionCapacity",
     };
 
     const imported: MenuItemInput[] = rows.map((row) => {
@@ -371,7 +374,6 @@ export function BusinessForm({ onSubmit, isSubmitting }: Props) {
             field === "name" ? String(row[col]) : Number(row[col]) || 0;
         }
       }
-      // "إجمالي التكلفة" is the total monthly cost — divide by units to get per-unit cost
       if (row["إجمالي التكلفة"] !== undefined) {
         const totalCost = Number(row["إجمالي التكلفة"]) || 0;
         const units = Number(row["وحدات مباعة شهرياً"]) || 1;
@@ -380,32 +382,64 @@ export function BusinessForm({ onSubmit, isSubmitting }: Props) {
       return item;
     }).filter((it) => it.name.trim());
 
-    // Items imported with a total cost column use "total" mode
     const importedModes = rows
-      .filter((row) => {
-        const name = String(row["اسم المنتج"] ?? "").trim();
-        return name.length > 0;
-      })
+      .filter((row) => String(row["اسم المنتج"] ?? "").trim().length > 0)
       .map((row) => (row["إجمالي التكلفة"] !== undefined ? "total" : "detailed") as "total" | "detailed");
 
     if (!imported.length) return;
-
     setData((d) => ({ ...d, items: [...d.items, ...imported] }));
     setCollapsed((c) => [...c, ...Array(imported.length).fill(true)]);
     setCostModes((m) => [...m, ...importedModes]);
     e.target.value = "";
   };
 
-  const canSubmit =
+  // ── Validation ────────────────────────────────────────────────────────────
+
+  // Item-level warnings (non-blocking)
+  const costWarnings = data.items.flatMap((item, i) => {
+    if (!item.name.trim()) return [];
+    const cost = item.totalCostPerUnit ?? item.rawMaterialCostPerUnit ?? 0;
+    const warnings: string[] = [];
+    if (item.sellingPrice > 0 && cost > item.sellingPrice * 0.8)
+      warnings.push(`المنتج "${item.name}": التكلفة مرتفعة جداً (${cost.toFixed(2)} ر.س مقابل سعر ${item.sellingPrice.toFixed(2)} ر.س)`);
+    if (item.sellingPrice === 0 && cost > 0)
+      warnings.push(`المنتج "${item.name}": السعر يجب أن يكون أكبر من صفر`);
+    return warnings;
+  });
+
+  // Section-level soft warnings (non-blocking)
+  const allCostsZero =
+    data.rent === 0 && data.adminSalaries === 0 && data.utilities === 0 &&
+    data.productionStaffCosts === 0 && data.adminExpenses === 0 &&
+    data.subscriptions === 0 && data.govFees === 0 &&
+    data.serviceLaborCosts === 0 && data.otherCosts === 0;
+
+  const noSocialAccounts = !data.instagramUser?.trim() && !data.tiktokUser?.trim();
+
+  // Hard gate — blocks submit
+  const canSubmit = Boolean(
     data.businessName.trim() &&
     data.placeId.trim() &&
+    data.sales > 0 &&
     data.items.length > 0 &&
-    data.items.every((it) => it.name.trim());
+    data.items.every((it) => it.name.trim() && it.sellingPrice > 0 && it.soldUnits > 0)
+  );
 
   const handleSubmit = () => {
     if (!canSubmit || isSubmitting) return;
+    clearDraft();
     onSubmit(data);
   };
+
+  // ── Count non-zero fields in a group (for badge on collapsed trigger) ────
+  const deductionsCount = [data.returns, data.advertising, data.discounts].filter(Boolean).length;
+  const extraCostsCount = [
+    data.adminExpenses, data.subscriptions, data.govFees,
+    data.serviceLaborCosts, data.otherCosts,
+  ].filter(Boolean).length;
+
+  // ── Items summary ─────────────────────────────────────────────────────────
+  const totalItemsRevenue = data.items.reduce((s, it) => s + (it.sellingPrice * it.soldUnits), 0);
 
   return (
     <motion.div
@@ -414,22 +448,17 @@ export function BusinessForm({ onSubmit, isSubmitting }: Props) {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, ease: "easeOut" }}
     >
-      {/* Title */}
       <div className="mb-6">
         <h2 className="text-xl font-semibold tracking-tight" dir="rtl">بيانات المشروع</h2>
-        <p className="mt-1 text-sm text-muted-foreground" dir="rtl">
+        <p className="mt-1 text-muted-foreground" dir="rtl">
           أدخل بيانات مشروعك لإنشاء تقرير تحليل الأعمال الشامل
         </p>
       </div>
 
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList className="mb-6 w-full">
-          <TabsTrigger value="info" className="flex-1 text-xs">
-            المعلومات الأساسية
-          </TabsTrigger>
-          <TabsTrigger value="finance" className="flex-1 text-xs">
-            البيانات المالية
-          </TabsTrigger>
+          <TabsTrigger value="info" className="flex-1 text-xs">المعلومات الأساسية</TabsTrigger>
+          <TabsTrigger value="finance" className="flex-1 text-xs">البيانات المالية</TabsTrigger>
           <TabsTrigger value="items" className="flex-1 text-xs">
             المنتجات ({data.items.length})
           </TabsTrigger>
@@ -448,13 +477,9 @@ export function BusinessForm({ onSubmit, isSubmitting }: Props) {
           <Field label="نوع المشروع">
             <Select
               value={data.businessType}
-              onValueChange={(v) =>
-                set("businessType", v as FinancialFormData["businessType"])
-              }
+              onValueChange={(v) => set("businessType", v as FinancialFormData["businessType"])}
             >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
+              <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="cafe">كافيه / مقهى</SelectItem>
                 <SelectItem value="restaurant">مطعم</SelectItem>
@@ -479,28 +504,29 @@ export function BusinessForm({ onSubmit, isSubmitting }: Props) {
 
           <Separator />
 
-          <p className="text-xs font-medium text-muted-foreground">
-            حسابات التواصل الاجتماعي (اختياري)
-          </p>
+          <p className="text-muted-foreground font-medium">حسابات التواصل الاجتماعي (اختياري)</p>
+          {noSocialAccounts && (
+            <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-amber-800 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-200">
+              أضف حسابات التواصل الاجتماعي لتحليل رقمي أشمل
+            </p>
+          )}
 
           <div className="grid grid-cols-2 gap-4">
             <Field label="Instagram">
-              <div className="flex items-center gap-1">
-                <Input
-                  value={data.instagramUser}
-                  onChange={(e) => set("instagramUser", e.target.value)}
-                  dir="ltr"
-                />
-              </div>
+              <Input
+                value={data.instagramUser ?? ""}
+                onChange={(e) => set("instagramUser", e.target.value || undefined)}
+                dir="ltr"
+                placeholder="username"
+              />
             </Field>
             <Field label="TikTok">
-              <div className="flex items-center gap-1">
-                <Input
-                  value={data.tiktokUser}
-                  onChange={(e) => set("tiktokUser", e.target.value)}
-                  dir="ltr"
-                />
-              </div>
+              <Input
+                value={data.tiktokUser ?? ""}
+                onChange={(e) => set("tiktokUser", e.target.value || undefined)}
+                dir="ltr"
+                placeholder="username"
+              />
             </Field>
           </div>
 
@@ -514,69 +540,110 @@ export function BusinessForm({ onSubmit, isSubmitting }: Props) {
 
         {/* ── Tab 2: Financials ──────────────────────────────────────── */}
         <TabsContent value="finance" className="space-y-5">
-          <p className="text-xs font-medium text-muted-foreground">
-            الإيرادات الشهرية (بالريال السعودي)
-          </p>
-          <div className="grid grid-cols-2 gap-4">
-            <Field label="إجمالي المبيعات">
-              <NumericInput value={data.sales} onChange={(v) => set("sales", v)} />
-            </Field>
-            <Field label="الرواجع والمرتجعات">
-              <NumericInput value={data.returns} onChange={(v) => set("returns", v)} />
-            </Field>
-            <Field label="الإعلانات والتسويق">
-              <NumericInput value={data.advertising} onChange={(v) => set("advertising", v)} />
-            </Field>
-            <Field label="الخصومات والكوبونات">
-              <NumericInput value={data.discounts} onChange={(v) => set("discounts", v)} />
-            </Field>
-          </div>
 
-          <Separator />
-
-          <p className="text-xs font-medium text-muted-foreground">
-            التكاليف المتغيرة
-          </p>
+          {/* Essential revenue + costs — always visible */}
+          <p className="font-medium text-muted-foreground">الإيرادات والتكاليف الأساسية</p>
           <div className="grid grid-cols-2 gap-4">
-            <Field label="تكاليف موظفي الإنتاج">
+            <Field
+              label="إجمالي المبيعات الشهرية"
+              error={data.sales === 0 ? "مطلوب لإنشاء التقرير" : undefined}
+            >
               <NumericInput
-                value={data.productionStaffCosts}
-                onChange={(v) => set("productionStaffCosts", v)}
+                value={data.sales}
+                onChange={(v) => set("sales", v)}
+                error={data.sales === 0}
               />
-            </Field>
-          </div>
-
-          <Separator />
-
-          <p className="text-xs font-medium text-muted-foreground">
-            التكاليف الثابتة الشهرية
-          </p>
-          <div className="grid grid-cols-2 gap-4">
-            <Field label="رواتب الإدارة">
-              <NumericInput value={data.adminSalaries} onChange={(v) => set("adminSalaries", v)} />
-            </Field>
-            <Field label="المنصرفات الإدارية">
-              <NumericInput value={data.adminExpenses} onChange={(v) => set("adminExpenses", v)} />
             </Field>
             <Field label="الإيجار">
               <NumericInput value={data.rent} onChange={(v) => set("rent", v)} />
             </Field>
+            <Field label="رواتب الإدارة">
+              <NumericInput value={data.adminSalaries} onChange={(v) => set("adminSalaries", v)} />
+            </Field>
             <Field label="الكهرباء والماء">
               <NumericInput value={data.utilities} onChange={(v) => set("utilities", v)} />
             </Field>
-            <Field label="الإنترنت والاشتراكات">
-              <NumericInput value={data.subscriptions} onChange={(v) => set("subscriptions", v)} />
-            </Field>
-            <Field label="الرسوم الحكومية">
-              <NumericInput value={data.govFees} onChange={(v) => set("govFees", v)} />
-            </Field>
-            <Field label="عمال النظافة والتقديم">
-              <NumericInput value={data.serviceLaborCosts} onChange={(v) => set("serviceLaborCosts", v)} />
-            </Field>
-            <Field label="تكاليف أخرى">
-              <NumericInput value={data.otherCosts} onChange={(v) => set("otherCosts", v)} />
+            <Field label="تكاليف موظفي الإنتاج">
+              <NumericInput value={data.productionStaffCosts} onChange={(v) => set("productionStaffCosts", v)} />
             </Field>
           </div>
+
+          <Separator />
+
+          {/* Revenue deductions — collapsible */}
+          <Collapsible defaultOpen={deductionsCount > 0}>
+            <CollapsibleTrigger asChild>
+              <button className="flex w-full items-center justify-between gap-2 text-right">
+                <span className="font-medium text-muted-foreground">خصومات الإيرادات</span>
+                <div className="flex items-center gap-2">
+                  {deductionsCount > 0 && (
+                    <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                      {deductionsCount} مدخلة
+                    </span>
+                  )}
+                  <ChevronDown className="size-4 text-muted-foreground transition-transform [[data-state=open]_&]:rotate-180" />
+                </div>
+              </button>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <div className="mt-3 grid grid-cols-2 gap-4">
+                <Field label="الرواجع والمرتجعات">
+                  <NumericInput value={data.returns} onChange={(v) => set("returns", v)} />
+                </Field>
+                <Field label="الإعلانات والتسويق">
+                  <NumericInput value={data.advertising} onChange={(v) => set("advertising", v)} />
+                </Field>
+                <Field label="الخصومات والكوبونات">
+                  <NumericInput value={data.discounts} onChange={(v) => set("discounts", v)} />
+                </Field>
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
+
+          <Separator />
+
+          {/* Additional fixed costs — collapsible */}
+          <Collapsible defaultOpen={extraCostsCount > 0}>
+            <CollapsibleTrigger asChild>
+              <button className="flex w-full items-center justify-between gap-2 text-right">
+                <span className="font-medium text-muted-foreground">تكاليف إضافية</span>
+                <div className="flex items-center gap-2">
+                  {extraCostsCount > 0 && (
+                    <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                      {extraCostsCount} مدخلة
+                    </span>
+                  )}
+                  <ChevronDown className="size-4 text-muted-foreground transition-transform [[data-state=open]_&]:rotate-180" />
+                </div>
+              </button>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <div className="mt-3 grid grid-cols-2 gap-4">
+                <Field label="المنصرفات الإدارية">
+                  <NumericInput value={data.adminExpenses} onChange={(v) => set("adminExpenses", v)} />
+                </Field>
+                <Field label="الإنترنت والاشتراكات">
+                  <NumericInput value={data.subscriptions} onChange={(v) => set("subscriptions", v)} />
+                </Field>
+                <Field label="الرسوم الحكومية">
+                  <NumericInput value={data.govFees} onChange={(v) => set("govFees", v)} />
+                </Field>
+                <Field label="عمال النظافة والتقديم">
+                  <NumericInput value={data.serviceLaborCosts} onChange={(v) => set("serviceLaborCosts", v)} />
+                </Field>
+                <Field label="تكاليف أخرى">
+                  <NumericInput value={data.otherCosts} onChange={(v) => set("otherCosts", v)} />
+                </Field>
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
+
+          {/* All costs zero warning */}
+          {allCostsZero && data.sales > 0 && (
+            <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-amber-800 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-200">
+              ادخل التكاليف للحصول على تحليل مالي دقيق
+            </p>
+          )}
 
           <div className="flex justify-end pt-2">
             <Button size="sm" variant="outline" onClick={() => setTab("items")}>
@@ -588,6 +655,47 @@ export function BusinessForm({ onSubmit, isSubmitting }: Props) {
 
         {/* ── Tab 3: Menu Items ──────────────────────────────────────── */}
         <TabsContent value="items" className="space-y-4">
+
+          {/* Summary row */}
+          {data.items.length > 0 && (
+            <div className="flex items-center justify-between rounded-lg border bg-muted/30 px-4 py-2" dir="rtl">
+              <span className="text-muted-foreground">{data.items.length} منتجات</span>
+              <span className="font-semibold tabular-nums">
+                {totalItemsRevenue.toLocaleString("ar-SA")} ر.س / شهر
+              </span>
+            </div>
+          )}
+
+          {/* Add + Import toolbar — at the top */}
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="flex-1 gap-1.5 border-dashed text-xs"
+              onClick={addItem}
+            >
+              <PlusIcon className="size-3.5" />
+              إضافة منتج
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5 text-xs"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <Upload className="size-3.5" />
+              استيراد من Excel
+            </Button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".xlsx,.xls,.csv"
+              className="hidden"
+              onChange={handleExcelImport}
+            />
+          </div>
+
+          {/* Items list */}
           {data.items.map((item, i) => (
             <motion.div
               key={i}
@@ -616,6 +724,11 @@ export function BusinessForm({ onSubmit, isSubmitting }: Props) {
                       <span className="text-sm font-medium">
                         {item.name.trim() || `منتج ${i + 1}`}
                       </span>
+                      {item.sellingPrice > 0 && item.soldUnits > 0 && (
+                        <span className="text-muted-foreground tabular-nums">
+                          · {(item.sellingPrice * item.soldUnits).toLocaleString("ar-SA")} ر.س
+                        </span>
+                      )}
                     </button>
                   </CollapsibleTrigger>
 
@@ -633,17 +746,20 @@ export function BusinessForm({ onSubmit, isSubmitting }: Props) {
                           return n;
                         });
                       }}
-                      title={
-                        costModes[i] === "detailed"
-                          ? "التبديل لإجمالي التكلفة"
-                          : "التبديل لتفاصيل التكلفة"
-                      }
+                      title={costModes[i] === "detailed" ? "التبديل لإجمالي التكلفة" : "التبديل لتفاصيل التكلفة"}
                     >
-                      {costModes[i] === "detailed" ? (
-                        <Layers2 className="size-3" />
-                      ) : (
-                        <Combine className="size-3" />
-                      )}
+                      {costModes[i] === "detailed" ? <Layers2 className="size-3" /> : <Combine className="size-3" />}
+                    </Button>
+
+                    {/* Duplicate button */}
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      className="size-6"
+                      onClick={(e) => { e.stopPropagation(); duplicateItem(i); }}
+                      title="تكرار المنتج"
+                    >
+                      <Copy className="size-3" />
                     </Button>
 
                     {/* Delete button */}
@@ -672,16 +788,24 @@ export function BusinessForm({ onSubmit, isSubmitting }: Props) {
                         />
                       </Field>
                     </div>
-                    <Field label="سعر البيع (SAR)">
+                    <Field
+                      label="سعر البيع (SAR)"
+                      error={item.name.trim() && item.sellingPrice === 0 ? "مطلوب" : undefined}
+                    >
                       <NumericInput
                         value={item.sellingPrice}
                         onChange={(v) => setItem(i, "sellingPrice", v)}
+                        error={Boolean(item.name.trim() && item.sellingPrice === 0)}
                       />
                     </Field>
-                    <Field label="الوحدات المباعة شهرياً">
+                    <Field
+                      label="الوحدات المباعة شهرياً"
+                      error={item.name.trim() && item.soldUnits === 0 ? "مطلوب" : undefined}
+                    >
                       <NumericInput
                         value={item.soldUnits}
                         onChange={(v) => setItem(i, "soldUnits", v)}
+                        error={Boolean(item.name.trim() && item.soldUnits === 0)}
                       />
                     </Field>
 
@@ -723,44 +847,13 @@ export function BusinessForm({ onSubmit, isSubmitting }: Props) {
             </motion.div>
           ))}
 
-          {/* Toolbar: Add + Import */}
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              className="flex-1 gap-1.5 border-dashed text-xs"
-              onClick={addItem}
-            >
-              <PlusIcon className="size-3.5" />
-              إضافة منتج
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-1.5 text-xs"
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <Upload className="size-3.5" />
-              استيراد من Excel
-            </Button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".xlsx,.xls,.csv"
-              className="hidden"
-              onChange={handleExcelImport}
-            />
-          </div>
-
           {/* Submit */}
-          <div className="pt-2">
+          <div className="pt-2 space-y-3">
             {costWarnings.length > 0 && (
-              <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-200">
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-amber-800 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-200">
                 <p className="font-semibold">تحذيرات:</p>
                 <ul className="mt-1 list-inside list-disc">
-                  {costWarnings.map((w, i) => (
-                    <li key={i}>{w}</li>
-                  ))}
+                  {costWarnings.map((w, i) => <li key={i}>{w}</li>)}
                 </ul>
               </div>
             )}
@@ -769,7 +862,9 @@ export function BusinessForm({ onSubmit, isSubmitting }: Props) {
               onClick={handleSubmit}
               disabled={!canSubmit || isSubmitting}
             >
-              {isSubmitting ? "جارٍ إنشاء التقرير..." : "إنشاء التقرير الشامل"}
+              {isSubmitting ? (
+                <><Loader2 className="size-4 animate-spin" />جارٍ إنشاء التقرير...</>
+              ) : "إنشاء التقرير الشامل"}
             </Button>
           </div>
         </TabsContent>
