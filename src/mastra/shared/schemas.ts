@@ -268,29 +268,31 @@ export const actionPlanPhaseSchema = z.object({
   tasks: z.array(actionPlanTaskSchema).describe('2-3 tasks to complete this phase'),
 });
 
-export const visualTypeSchema = z.enum([
-  'bar-chart',
-  'line-chart',
-  'pie-chart',
-  'metric-grid',
-  'table',
-  'radar-chart',
+// ── Chart Reference (LLM picks which chart to show, frontend renders from collected data) ──
+
+export const chartDataSourceSchema = z.enum([
+  'revenue-vs-breakeven',
+  'cost-breakdown',
+  'menu-bcg-distribution',
+  'engagement-vs-benchmark',
+  'sentiment-breakdown',
+  'top-review-topics',
+  'rating-comparison',
+  'review-volume',
 ]);
 
-export const chartDataPointSchema = z.object({
-  label: z.string().describe('Label for the data point'),
-  value: z.number().describe('Numeric value for the data point'),
-  comparisonValue: z.number().optional().describe('Optional benchmark or comparison value'),
-  unit: z.string().optional().describe('Optional unit for the value (e.g., "SAR", "%", " SAR")'),
-  category: z.string().optional().describe('Optional category grouping for the data point'),
+export const chartReferenceSchema = z.object({
+  dataSource: chartDataSourceSchema.describe('Which pre-built chart to display — the frontend renders it from collected data'),
+  insight: z.string().describe('One-sentence Arabic caption explaining why this chart matters for this specific business'),
 });
 
-export const reportVisualSchema = z.object({
-  type: visualTypeSchema.describe('Chart type to render'),
-  title: z.string().describe('Title for the visual'),
-  description: z.string().describe('Markdown description explaining what this visual shows'),
-  data: z.array(chartDataPointSchema).min(1).describe('Data points for the visual (must have at least 1)'),
-  config: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.array(z.string())])).optional().describe('Optional chart config overrides (columns should be array of strings)'),
+// ── Expected Outcomes (action plan KPI targets) ──
+
+export const expectedOutcomeSchema = z.object({
+  metric: z.string().describe('KPI name in Arabic, e.g. "صافي الهامش"'),
+  current: z.number().describe('Current value from the collected data'),
+  target: z.number().describe('Realistic target value to achieve'),
+  unit: z.string().describe('Unit: "%" or "SAR" or "x"'),
 });
 
 export const reportSectionSchema = z.object({
@@ -300,7 +302,7 @@ export const reportSectionSchema = z.object({
     text: z.string().describe('One-sentence conclusion summarizing the section finding'),
     severity: z.enum(['success', 'warning', 'critical']).describe('Traffic-light severity: success=healthy, warning=needs attention, critical=urgent'),
   }).describe('Section conclusion with severity indicator'),
-  visuals: z.array(reportVisualSchema).describe('2-3 charts or grids that visually prove the conclusion'),
+  charts: z.array(chartReferenceSchema).max(3).optional().describe('1-3 chart references — pick from the available dataSource options that best support your conclusion. The frontend renders these from real collected data.'),
   narrative: z.string().describe('Detailed Markdown narrative with analysis and key findings'),
   citations: z.array(z.string()).optional().describe('Source URLs or references used in the analysis'),
   tacticalMoves: z.array(z.object({
@@ -311,6 +313,7 @@ export const reportSectionSchema = z.object({
   keyStrengths: z.array(z.string()).optional().describe('2-3 domain-specific strengths discovered in this section (Arabic)'),
   keyRisks: z.array(z.string()).optional().describe('2-3 domain-specific risks or weaknesses discovered in this section (Arabic)'),
   phases: z.array(actionPlanPhaseSchema).optional().describe('Structured action plan phases — only populated for the action-plan section'),
+  expectedOutcomes: z.array(expectedOutcomeSchema).max(4).optional().describe('3-4 KPI targets showing current → target — only for the action-plan section'),
 });
 
 export const strategicDirectiveSchema = z.object({

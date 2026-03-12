@@ -1,28 +1,26 @@
 // Shared types for the report manifest and workflow progress.
 // Single source of truth — imported by page.tsx, report-view.tsx, charts, etc.
 
-export type VisualType =
-  | "bar-chart"
-  | "line-chart"
-  | "pie-chart"
-  | "metric-grid"
-  | "table"
-  | "radar-chart";
+export type ChartDataSource =
+  | "revenue-vs-breakeven"
+  | "cost-breakdown"
+  | "menu-bcg-distribution"
+  | "engagement-vs-benchmark"
+  | "sentiment-breakdown"
+  | "top-review-topics"
+  | "rating-comparison"
+  | "review-volume";
 
-export type ChartDataPoint = {
-  label: string;
-  value: number;
-  comparisonValue?: number;
-  category?: string;
-  unit?: string;
+export type ChartReference = {
+  dataSource: ChartDataSource;
+  insight: string;
 };
 
-export type ReportVisual = {
-  type: VisualType;
-  title: string;
-  description: string;
-  data: ChartDataPoint[];
-  config?: Record<string, string | number | boolean | string[]>;
+export type ExpectedOutcome = {
+  metric: string;
+  current: number;
+  target: number;
+  unit: string;
 };
 
 // ── Action Plan Types ─────────────────────────────────────────────────────────
@@ -49,7 +47,7 @@ export type ReportSection = {
   id: string;
   title: string;
   conclusion: { text: string; severity: "success" | "warning" | "critical" };
-  visuals: ReportVisual[];
+  charts?: ChartReference[];
   narrative: string;
   citations?: string[];
   tacticalMoves?: Array<{
@@ -60,6 +58,7 @@ export type ReportSection = {
   keyStrengths?: string[];
   keyRisks?: string[];
   phases?: ActionPlanPhase[];
+  expectedOutcomes?: ExpectedOutcome[];
 };
 
 // ── Report Manifest ───────────────────────────────────────────────────────────
@@ -130,6 +129,17 @@ export type CollectedFinancials = {
   isAboveBreakEven: boolean;
   rawMaterials: number;
   packaging: number;
+  // Individual cost lines for cost breakdown chart
+  productionStaffCosts: number;
+  rent: number;
+  adminSalaries: number;
+  adminExpenses: number;
+  utilities: number;
+  subscriptions: number;
+  govFees: number;
+  serviceLaborCosts: number;
+  otherCosts: number;
+  advertising: number;
   items: CollectedFinancialItem[];
 };
 

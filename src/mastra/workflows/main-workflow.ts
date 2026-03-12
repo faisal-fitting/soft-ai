@@ -292,19 +292,18 @@ ${toYaml(inputData.items)}
 
 ## Task
 Analyze the financial data and provide actionable insights.
-IMPORTANT: Use the pre-computed KPIs exactly as provided in your metric-grid visuals.
-Do NOT recalculate totals from per-product data.
+IMPORTANT: Use the pre-computed KPIs exactly as provided — do NOT recalculate totals from per-product data.
 
-**Visual Requirements:**
-- For "top products by revenue" visualization: Use type "table" NOT "bar-chart". Include columns: المنتج، الإيرادات، هامش الربح، التصنيف (نجم/حصان/كلب/لغز)
-- Keep bar-chart only for simple comparisons (2-3 items max)
+**Chart Selection:**
+Pick 1-3 charts from: "revenue-vs-breakeven", "cost-breakdown", "menu-bcg-distribution".
+For each, write a one-sentence Arabic insight explaining why it matters for this specific business.
 
 Focus on profitability, break-even analysis, cost optimization, and menu engineering.`;
     const response = await agent!.generate(prompt, {
       structuredOutput: {
         schema: reportSectionSchema,
         errorStrategy: 'fallback',
-        fallbackValue: { id: 'financials', title: 'Financial Performance', conclusion: { text: 'Financial analysis pending', severity: 'warning' }, visuals: [], narrative: 'Financial data is currently unavailable.' }
+        fallbackValue: { id: 'financials', title: 'الوضع المالي', conclusion: { text: 'التحليل المالي قيد الانتظار', severity: 'warning' as const }, charts: [], narrative: 'البيانات المالية غير متوفرة حالياً.' }
       }
     });
     
@@ -343,12 +342,15 @@ ${toYaml(inputData.socialAudit)}
 ## Task
 Analyze the digital presence data and provide actionable insights.
 Focus on online reputation, social media performance, and competitive digital positioning.
-Include visual components that show rating metrics, engagement benchmarks, and competitor comparisons.`;
+
+**Chart Selection:**
+Pick 1-3 charts from: "engagement-vs-benchmark", "sentiment-breakdown", "top-review-topics".
+For each, write a one-sentence Arabic insight explaining why it matters for this specific business.`;
     const response = await agent!.generate(prompt, {
       structuredOutput: {
         schema: reportSectionSchema,
         errorStrategy: 'fallback',
-        fallbackValue: { id: 'digital', title: 'Digital Presence', conclusion: { text: 'Digital analysis pending', severity: 'warning' }, visuals: [], narrative: 'Social media data is currently unavailable.' }
+        fallbackValue: { id: 'digital', title: 'تحليل التواجد الرقمي', conclusion: { text: 'تحليل الحضور الرقمي قيد الانتظار', severity: 'warning' as const }, charts: [], narrative: 'بيانات وسائل التواصل الاجتماعي غير متوفرة حالياً.' }
       }
     });
     await writer?.write({ type: 'data-step-progress', data: { step: 'digital', status: 'complete', message: 'تم تحليل الحضور الرقمي' } });
@@ -385,7 +387,10 @@ ${toYaml(inputData.competitorReviews ?? [])}
 ## Task
 Analyze the market data and provide competitive insights.
 Focus on competitor positioning, pricing strategies, and market opportunities.
-Include visual components that show competitor metrics, pricing comparison, and market benchmarks.
+
+**Chart Selection:**
+Pick 1-2 charts from: "rating-comparison", "review-volume".
+For each, write a one-sentence Arabic insight explaining why it matters for this specific business.
 
 **IMPORTANT: Exclude any competitor from your analysis if they have 0 reviews AND 0 rating.**
 These are unverified or inactive listings, not real competitors.
@@ -402,7 +407,7 @@ Base the strengths/weaknesses on their review content above.`;
       structuredOutput: {
         schema: reportSectionSchema,
         errorStrategy: 'fallback',
-        fallbackValue: { id: 'market', title: 'Market Analysis', conclusion: { text: 'Market analysis pending', severity: 'warning' }, visuals: [], narrative: 'Competitor data is currently unavailable.' }
+        fallbackValue: { id: 'market', title: 'السوق والمنافسين القريبين', conclusion: { text: 'تحليل السوق قيد الانتظار', severity: 'warning' as const }, charts: [], narrative: 'بيانات المنافسين غير متوفرة حالياً.' }
       }
     });
     await writer?.write({ type: 'data-step-progress', data: { step: 'market', status: 'complete', message: 'تم تحليل السوق' } });
@@ -503,11 +508,12 @@ ${toYaml({ conclusion: inputData.market.conclusion, tacticalMoves: inputData.mar
           id: 'action-plan', 
           title: 'خطة العمل', 
           conclusion: { text: 'لم يتمكن النظام من إنشاء خطة العمل', severity: 'warning' as const }, 
-          visuals: [], 
+          charts: [],
           narrative: 'حدث خطأ أثناء إنشاء خطة العمل.',
           phases: [],
           keyStrengths: [],
           keyRisks: [],
+          expectedOutcomes: [],
         }
       }
     });

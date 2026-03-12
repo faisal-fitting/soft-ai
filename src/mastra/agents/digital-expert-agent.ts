@@ -18,7 +18,7 @@ export const digitalExpertAgent = new Agent({
     **Reasoning Process:**
     1.  **Synthesize the "Story":** Find the connection between the review sentiment and the social media performance.
         - *Example:* If "Critical Weakness" in reviews is "Service," but the social content never shows staff, your conclusion should be: "The digital presence is disconnected from the core operational issue."
-    2.  **Select Key Visuals:** Based on the "Story," choose the most impactful charts.
+    2.  **Select Charts:** Choose 1-3 charts from the available data sources that best prove your conclusion. Pick from: "engagement-vs-benchmark" (engagement rate vs Saudi F&B benchmark per platform), "sentiment-breakdown" (customer sentiment distribution), "top-review-topics" (most discussed topics by customers). For each, write a one-sentence Arabic insight explaining why it matters for this specific business.
     3.  **Formulate Tactical Moves:** Your actions must address the synthesized story.
 
     **Social Media Benchmarks (Saudi F&B):**

@@ -40,7 +40,8 @@ import { cn } from "@/lib/utils";
 import type {
   ReportManifest,
   ReportSection,
-  ReportVisual,
+  ChartReference,
+  ExpectedOutcome,
   CollectedData,
   CollectedFinancials,
   CollectedReviews,
@@ -51,10 +52,9 @@ import type {
   CollectedCompetitorWithReviews,
 } from "@/lib/types";
 import { MessageResponse } from "@/components/ai-elements/message";
-import { BarChartVisual } from "@/components/charts/bar-chart";
-import { LineChartVisual } from "@/components/charts/line-chart";
-import { PieChartVisual } from "@/components/charts/pie-chart";
-import { RadarChartVisual } from "@/components/charts/radar-chart";
+import { DataBarChart } from "@/components/charts/bar-chart";
+import { DataPieChart } from "@/components/charts/pie-chart";
+import { ArrowLeft } from "lucide-react";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -129,99 +129,249 @@ function NarrativeBlock({ markdown }: { markdown: string }) {
   );
 }
 
-// ── Visual Components ─────────────────────────────────────────────────────
+// ── Deterministic Chart Components ────────────────────────────────────────────
 
-function MetricGridVisual({ visual }: { visual: ReportVisual }) {
+function ChartInsight({ insight }: { insight: string }) {
+  return <p className="text-muted-foreground mt-3 leading-snug">{insight}</p>;
+}
+
+function RevenueVsBreakevenChart({ financials, insight }: { financials: CollectedFinancials; insight: string }) {
+  const data = [
+    { label: 'صافي الإيرادات', value: financials.netRevenue },
+    { label: 'نقطة التعادل', value: financials.breakEvenRevenue },
+  ];
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-base">{visual.title}</CardTitle>
-        {visual.description && <p className="text-muted-foreground">{visual.description}</p>}
+        <CardTitle className="text-base">الإيرادات مقابل نقطة التعادل</CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-          {visual.data.map((d, i) => {
-            const hasCmp = d.comparisonValue != null;
-            const diff = hasCmp ? d.value - d.comparisonValue! : null;
-            const TrendIcon = diff && diff > 0 ? TrendingUp : diff && diff < 0 ? TrendingDown : Minus;
-
-            return (
-              <div key={i} className="rounded-lg border bg-background p-3 text-center">
-                <p className="text-muted-foreground uppercase">{d.label}</p>
-                <p className="text-2xl font-bold mt-1">{fmt(d.value, 0, d.unit)}</p>
-                {hasCmp && (
-                  <div className="flex items-center justify-center gap-1 mt-1">
-                    <TrendIcon className={cn('size-3', diff! > 0 ? 'text-emerald-500' : diff! < 0 ? 'text-red-500' : 'text-muted-foreground')} />
-                    <span className="text-muted-foreground">{fmt(d.comparisonValue!, 0, d.unit)}</span>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
+        <DataBarChart data={data} unit="ر.س" />
+        <ChartInsight insight={insight} />
       </CardContent>
     </Card>
   );
 }
 
-function TableVisual({ visual }: { visual: ReportVisual }) {
-  const hasComparison = visual.data.some(d => d.comparisonValue != null);
-  const hasCategory = visual.data.some(d => d.category);
-
+function CostBreakdownChart({ financials, insight }: { financials: CollectedFinancials; insight: string }) {
+  const COST_LABELS: Record<string, string> = {
+    rawMaterials:         'المواد الخام',
+    packaging:            'التغليف',
+    productionStaffCosts: 'عمال الإنتاج',
+    rent:                 'الإيجار',
+    adminSalaries:        'رواتب الإدارة',
+    adminExpenses:        'المنصرفات الإدارية',
+    utilities:            'الكهرباء والماء',
+    subscriptions:        'الاشتراكات',
+    govFees:              'الرسوم الحكومية',
+    serviceLaborCosts:    'عمال الخدمة',
+    otherCosts:           'أخرى',
+    advertising:          'الإعلانات',
+  };
+  const costFields = Object.keys(COST_LABELS) as (keyof CollectedFinancials)[];
+  const data = costFields
+    .map(k => ({ label: COST_LABELS[k], value: (financials[k] as number) ?? 0 }))
+    .filter(d => d.value > 0);
+  if (data.length === 0) return null;
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-base">{visual.title}</CardTitle>
-        {visual.description && <p className="text-muted-foreground">{visual.description}</p>}
+        <CardTitle className="text-base">تفصيل هيكل التكاليف</CardTitle>
       </CardHeader>
-      <CardContent className="p-0">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="text-right">البند</TableHead>
-              <TableHead className="text-right">القيمة</TableHead>
-              {hasComparison && <TableHead className="text-right">المعيار</TableHead>}
-              {hasCategory && <TableHead className="text-right">الفئة</TableHead>}
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {visual.data.map((d, i) => (
-              <TableRow key={i}>
-                <TableCell className="font-medium">{d.label}</TableCell>
-                <TableCell className="tabular-nums">{fmt(d.value, 0, d.unit)}</TableCell>
-                {hasComparison && <TableCell className="tabular-nums text-muted-foreground">{d.comparisonValue != null ? fmt(d.comparisonValue, 0, d.unit) : '-'}</TableCell>}
-                {hasCategory && <TableCell className="text-muted-foreground">{d.category ?? '-'}</TableCell>}
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+      <CardContent>
+        <DataPieChart data={data} unit="ر.س" />
+        <ChartInsight insight={insight} />
       </CardContent>
     </Card>
   );
 }
 
-function VisualRenderer({ visual }: { visual: ReportVisual }) {
-  if (!visual.data || visual.data.length === 0) {
-    return (
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base">{visual.title}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground text-center py-4">لا توجد بيانات كافية</p>
-        </CardContent>
-      </Card>
-    );
+function MenuBcgChart({ items, insight }: { items: CollectedFinancials['items']; insight: string }) {
+  const counts = { star: 0, plowhorse: 0, puzzle: 0, dog: 0 };
+  for (const item of items) counts[item.menuCategory]++;
+  const data = [
+    { label: 'نجم ⭐', value: counts.star },
+    { label: 'حصان 🐴', value: counts.plowhorse },
+    { label: 'لغز ❓', value: counts.puzzle },
+    { label: 'كلب 🐕', value: counts.dog },
+  ].filter(d => d.value > 0);
+  if (data.length === 0) return null;
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base">توزيع هندسة القائمة (BCG)</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <DataPieChart data={data} />
+        <ChartInsight insight={insight} />
+      </CardContent>
+    </Card>
+  );
+}
+
+function EngagementVsBenchmarkChart({ benchmarks, insight }: { benchmarks: CollectedData['socialAudit']['platformBenchmarks']; insight: string }) {
+  if (benchmarks.length === 0) return null;
+  const data = benchmarks.map(b => ({
+    label: b.platform === 'instagram' ? 'Instagram' : 'TikTok',
+    value: b.engagementRate,
+    comparisonValue: b.benchmark,
+  }));
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base">معدل التفاعل مقابل المعيار السعودي</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <DataBarChart data={data} unit="%" valueLabel="معدلك" comparisonLabel="المعيار" />
+        <ChartInsight insight={insight} />
+      </CardContent>
+    </Card>
+  );
+}
+
+function SentimentBreakdownChart({ themes, insight }: { themes: CollectedData['semantic']['themes']; insight: string }) {
+  const counts = { positive: 0, negative: 0, neutral: 0 };
+  for (const t of themes) counts[t.sentiment]++;
+  const data = [
+    { label: 'إيجابي', value: counts.positive },
+    { label: 'سلبي', value: counts.negative },
+    { label: 'محايد', value: counts.neutral },
+  ].filter(d => d.value > 0);
+  if (data.length === 0) return null;
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base">توزيع مشاعر العملاء</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <DataPieChart data={data} />
+        <ChartInsight insight={insight} />
+      </CardContent>
+    </Card>
+  );
+}
+
+function TopReviewTopicsChart({ topics, insight }: { topics: CollectedData['reviews']['topics']; insight: string }) {
+  if (topics.length === 0) return null;
+  const data = [...topics]
+    .sort((a, b) => b.mentions - a.mentions)
+    .slice(0, 8)
+    .map(t => ({ label: t.keyword, value: t.mentions }));
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base">أكثر المواضيع ذكراً في التقييمات</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <DataBarChart data={data} valueLabel="عدد الذكر" />
+        <ChartInsight insight={insight} />
+      </CardContent>
+    </Card>
+  );
+}
+
+function RatingComparisonChart({ competitors, manifest, insight }: { competitors: CollectedCompetitor[]; manifest?: ReportManifest; insight: string }) {
+  const businessName = manifest?.metadata?.displayName ?? manifest?.metadata?.businessName ?? 'مشروعك';
+  const businessRating = manifest?.metadata?.rating;
+  const data: Array<{ label: string; value: number }> = [];
+  if (businessRating != null) data.push({ label: businessName, value: businessRating });
+  for (const c of competitors.slice(0, 6)) {
+    if (c.rating != null) data.push({ label: c.name, value: c.rating });
   }
-  switch (visual.type) {
-    case 'bar-chart':   return <BarChartVisual visual={visual} />;
-    case 'line-chart':  return <LineChartVisual visual={visual} />;
-    case 'pie-chart':   return <PieChartVisual visual={visual} />;
-    case 'radar-chart': return <RadarChartVisual visual={visual} />;
-    case 'metric-grid': return <MetricGridVisual visual={visual} />;
-    case 'table':       return <TableVisual visual={visual} />;
-    default:            return null;
+  if (data.length === 0) return null;
+  const sorted = [...data].sort((a, b) => b.value - a.value);
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base">مقارنة التقييمات مع المنافسين</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <DataBarChart data={sorted} unit="★" highlightLabel={businessName} />
+        <ChartInsight insight={insight} />
+      </CardContent>
+    </Card>
+  );
+}
+
+function ReviewVolumeChart({ competitors, manifest, insight }: { competitors: CollectedCompetitor[]; manifest?: ReportManifest; insight: string }) {
+  const businessName = manifest?.metadata?.displayName ?? manifest?.metadata?.businessName ?? 'مشروعك';
+  const businessReviewCount = manifest?.metadata?.reviewCount;
+  const data: Array<{ label: string; value: number }> = [];
+  if (businessReviewCount != null) data.push({ label: businessName, value: businessReviewCount });
+  for (const c of competitors.slice(0, 6)) {
+    if (c.reviewCount != null) data.push({ label: c.name, value: c.reviewCount });
   }
+  if (data.length === 0) return null;
+  const sorted = [...data].sort((a, b) => b.value - a.value);
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base">حجم التقييمات مقارنة بالمنافسين</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <DataBarChart data={sorted} valueLabel="عدد التقييمات" highlightLabel={businessName} />
+        <ChartInsight insight={insight} />
+      </CardContent>
+    </Card>
+  );
+}
+
+// ── ChartFromData dispatcher ──────────────────────────────────────────────────
+
+function ChartFromData({
+  chart,
+  collectedData,
+  manifest,
+}: {
+  chart: ChartReference;
+  collectedData?: CollectedData;
+  manifest?: ReportManifest;
+}) {
+  if (!collectedData) return null;
+  switch (chart.dataSource) {
+    case 'revenue-vs-breakeven':
+      return <RevenueVsBreakevenChart financials={collectedData.financials} insight={chart.insight} />;
+    case 'cost-breakdown':
+      return <CostBreakdownChart financials={collectedData.financials} insight={chart.insight} />;
+    case 'menu-bcg-distribution':
+      return <MenuBcgChart items={collectedData.financials.items} insight={chart.insight} />;
+    case 'engagement-vs-benchmark':
+      return <EngagementVsBenchmarkChart benchmarks={collectedData.socialAudit.platformBenchmarks} insight={chart.insight} />;
+    case 'sentiment-breakdown':
+      return <SentimentBreakdownChart themes={collectedData.semantic.themes} insight={chart.insight} />;
+    case 'top-review-topics':
+      return <TopReviewTopicsChart topics={collectedData.reviews.topics} insight={chart.insight} />;
+    case 'rating-comparison':
+      return <RatingComparisonChart competitors={collectedData.competitors} manifest={manifest} insight={chart.insight} />;
+    case 'review-volume':
+      return <ReviewVolumeChart competitors={collectedData.competitors} manifest={manifest} insight={chart.insight} />;
+    default:
+      return null;
+  }
+}
+
+// ── Expected Outcomes (action plan KPI targets) ───────────────────────────────
+
+function ExpectedOutcomesRow({ outcomes }: { outcomes: ExpectedOutcome[] }) {
+  return (
+    <div className="space-y-2">
+      <p className="font-semibold text-muted-foreground">النتائج المتوقعة</p>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {outcomes.map((o, i) => (
+          <Card key={i}>
+            <CardContent className="p-4 text-center">
+              <p className="text-muted-foreground leading-snug mb-2">{o.metric}</p>
+              <div className="flex items-center justify-center gap-2">
+                <span className="tabular-nums text-muted-foreground">{fmt(o.current, 1)} {o.unit}</span>
+                <ArrowLeft className="size-3.5 text-muted-foreground shrink-0" />
+                <span className="tabular-nums font-bold text-primary">{fmt(o.target, 1)} {o.unit}</span>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 // ── Action Plan ──────────────────────────────────────────────────────────────
@@ -292,12 +442,8 @@ function ActionPlanContent({ section }: { section: ReportSection }) {
       <div className="space-y-5" dir="rtl">
         <ConclusionBadge conclusion={section.conclusion} />
 
-        {section.visuals.length > 0 && (
-          <div className="flex flex-col gap-4">
-            {section.visuals.map((visual, i) => (
-              <VisualRenderer key={i} visual={visual} />
-            ))}
-          </div>
+        {(section.expectedOutcomes?.length ?? 0) > 0 && (
+          <ExpectedOutcomesRow outcomes={section.expectedOutcomes!} />
         )}
 
         <div className="space-y-4">
@@ -370,10 +516,8 @@ function ActionPlanContent({ section }: { section: ReportSection }) {
     <div className="space-y-5" dir="rtl">
       <ConclusionBadge conclusion={section.conclusion} />
 
-      {section.visuals.length > 0 && (
-        <div className="flex flex-col gap-4">
-          {section.visuals.map((visual, i) => <VisualRenderer key={i} visual={visual} />)}
-        </div>
+      {(section.expectedOutcomes?.length ?? 0) > 0 && (
+        <ExpectedOutcomesRow outcomes={section.expectedOutcomes!} />
       )}
 
       {goal && (
@@ -431,15 +575,23 @@ function ActionPlanContent({ section }: { section: ReportSection }) {
 
 // ── Standard Section ──────────────────────────────────────────────────────────
 
-function SectionContent({ section }: { section: ReportSection }) {
+function SectionContent({
+  section,
+  collectedData,
+  manifest,
+}: {
+  section: ReportSection;
+  collectedData?: CollectedData;
+  manifest?: ReportManifest;
+}) {
   return (
     <div className="space-y-6">
       <ConclusionBadge conclusion={section.conclusion} />
 
-      {section.visuals.length > 0 && (
+      {(section.charts?.length ?? 0) > 0 && (
         <div className="flex flex-col gap-4">
-          {section.visuals.map((visual, i) => (
-            <VisualRenderer key={i} visual={visual} />
+          {section.charts!.map((chart, i) => (
+            <ChartFromData key={i} chart={chart} collectedData={collectedData} manifest={manifest} />
           ))}
         </div>
       )}
@@ -1047,9 +1199,13 @@ function MarketDataSection({
 function SectionWithData({
   section,
   collectedContent,
+  collectedData,
+  manifest,
 }: {
   section: ReportSection;
   collectedContent?: React.ReactNode;
+  collectedData?: CollectedData;
+  manifest?: ReportManifest;
 }) {
   return (
     <div className="space-y-8">
@@ -1059,7 +1215,7 @@ function SectionWithData({
       {collectedContent && (
         <DataSectionHeading label="تحليل الذكاء الاصطناعي" />
       )}
-      <SectionContent section={section} />
+      <SectionContent section={section} collectedData={collectedData} manifest={manifest} />
     </div>
   );
 }
@@ -1184,7 +1340,7 @@ export function ReportView({
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.3 }}
                   >
-                    <SectionWithData section={section} collectedContent={collectedContent} />
+                    <SectionWithData section={section} collectedContent={collectedContent} collectedData={collectedData} manifest={manifest} />
                   </motion.div>
                 </TabsContent>
               );

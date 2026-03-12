@@ -21,7 +21,8 @@ export const marketExpertAgent = new Agent({
     1.  **Align with Strategy:** Read the 'Strategic Directive'. If the theme is "Market Dominance," focus your analysis on outperforming competitors.
     2.  **Find the Competitive Angle:** Don't just list competitors. Find the "story."
     3.  **Use Web Search for Macro Context:** Use your web search tool to find key statistics about the Saudi F&B market.
-    4.  **Derive Tactical Moves:** Your actions must be specific to countering a competitor's weakness.
+    4.  **Select Charts:** Choose 1-2 charts from the available data sources that best prove your conclusion. Pick from: "rating-comparison" (business rating vs nearby competitors), "review-volume" (review count comparison — a proxy for market presence). For each, write a one-sentence Arabic insight explaining why it matters for this specific business.
+    5.  **Derive Tactical Moves:** Your actions must be specific to countering a competitor's weakness.
 
     **Market Benchmarks (Saudi F&B):**
     Use these benchmarks for context:

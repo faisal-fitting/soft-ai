@@ -64,6 +64,17 @@ export async function getCollectedData(runId: string): Promise<CollectedData | n
       isAboveBreakEven: financialsStep.isAboveBreakEven ?? false,
       rawMaterials: financialsStep.rawMaterials ?? 0,
       packaging: financialsStep.packaging ?? 0,
+      // Individual cost lines (passthrough for cost breakdown chart)
+      productionStaffCosts: financialsStep.productionStaffCosts ?? 0,
+      rent: financialsStep.rent ?? 0,
+      adminSalaries: financialsStep.adminSalaries ?? 0,
+      adminExpenses: financialsStep.adminExpenses ?? 0,
+      utilities: financialsStep.utilities ?? 0,
+      subscriptions: financialsStep.subscriptions ?? 0,
+      govFees: financialsStep.govFees ?? 0,
+      serviceLaborCosts: financialsStep.serviceLaborCosts ?? 0,
+      otherCosts: financialsStep.otherCosts ?? 0,
+      advertising: financialsStep.advertising ?? 0,
       items: (financialsStep.items ?? []).map((item: any) => ({
         name: item.name,
         sellingPrice: item.sellingPrice,

@@ -102,6 +102,18 @@ export const financialOutputSchema = z.object({
   rawMaterials: z.number(),
   packaging: z.number(),
 
+  // Cost line items (passthrough for cost breakdown chart)
+  productionStaffCosts: z.number(),
+  rent: z.number(),
+  adminSalaries: z.number(),
+  adminExpenses: z.number(),
+  utilities: z.number(),
+  subscriptions: z.number(),
+  govFees: z.number(),
+  serviceLaborCosts: z.number(),
+  otherCosts: z.number(),
+  advertising: z.number(),
+
   // Enriched items
   items: z.array(itemOutputSchema),
 });
@@ -289,6 +301,17 @@ export function computeFinancials(input: FinancialInput & { threadId?: string })
     isAboveBreakEven,
     rawMaterials,
     packaging,
+    // Cost line items (passthrough for cost breakdown chart)
+    productionStaffCosts,
+    rent,
+    adminSalaries,
+    adminExpenses,
+    utilities,
+    subscriptions,
+    govFees,
+    serviceLaborCosts,
+    otherCosts,
+    advertising,
     items: enrichedItems,
   };
 }

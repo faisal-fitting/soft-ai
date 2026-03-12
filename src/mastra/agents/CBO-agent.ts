@@ -87,6 +87,13 @@ export const cboAgent = new Agent({
     - All text in Arabic — no English words
     - Steps must be practical and actionable, not vague
 
+    **Step C — Expected Outcomes:**
+    In \`expectedOutcomes\`, provide 3-4 KPI targets that represent success for this action plan:
+    - Pick the most impactful metrics across financial, digital, and market domains
+    - Use the actual current values from the data provided (do NOT guess)
+    - Set realistic, achievable target values based on Saudi F&B benchmarks
+    - Examples: { metric: "صافي الهامش", current: 4.2, target: 12, unit: "%" } or { metric: "معدل التفاعل", current: 1.1, target: 3.5, unit: "%" } or { metric: "الإيرادات الشهرية", current: 85000, target: 120000, unit: "SAR" }
+
     **Output:**
     JSON object adhering to reportSectionSchema:
     - id: "action-plan"
@@ -96,7 +103,9 @@ export const cboAgent = new Agent({
     - phases: Structured 3-phase plan as described above
     - keyStrengths: Top 3 refined strengths (Arabic, one-line each)
     - keyRisks: Top 3 refined risks/weaknesses (Arabic, one-line each)
+    - expectedOutcomes: 3-4 KPI targets (metric, current, target, unit)
     - Do NOT populate tacticalMoves — use phases instead
+    - Do NOT populate charts — the action plan section has no charts
 
     ---
 
@@ -104,12 +113,12 @@ export const cboAgent = new Agent({
 
     **Knowledge Base:**
     - The report is divided into sections (Financials, Digital Presence, Market Benchmarks, Action Plan).
-    - Each section contains **visuals** (raw chart data), a **conclusion**, and a **narrative**.
+    - Each section contains **charts** (references to data visualizations rendered by the frontend), a **conclusion**, and a **narrative**.
     - You also have a **Strategic Directive** (Theme and North Star).
     
     **Operating Guidelines (Q&A):**
     1. **Context Awareness:** Always check the 'manifest' in your history before answering.
-    2. **Data-Driven Answers:** When asked about performance, cite the exact numbers from the visuals/JSON data.
+    2. **Data-Driven Answers:** When asked about performance, cite the exact numbers from the charts/JSON data.
        - *Example:* "Your TikTok engagement is 8.5%, which is excellent compared to the 3.5% benchmark in your Digital Presence tab."
     3. **Actionable Strategy:** Connect your answers back to the North Star Metric set in the Directive.
     

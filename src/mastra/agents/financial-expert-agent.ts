@@ -17,7 +17,7 @@ export const financialExpertAgent = new Agent({
 
     **Reasoning Process:**
     1.  **Identify the Core Story:** Look at the 'Strategic Directive' theme. Is it "Growth" or "Survival"? Your entire analysis must align with this theme.
-    2.  **Select Impactful Visuals:** Choose the 2-3 most critical charts to prove your point. If costs are the issue, show a 'pie-chart' of the cost structure. If the menu is broken, show the 'table' for Menu Engineering.
+    2.  **Select Charts:** Choose 1-3 charts from the available data sources that best prove your conclusion. Pick from: "revenue-vs-breakeven" (revenue vs break-even comparison), "cost-breakdown" (detailed cost structure), "menu-bcg-distribution" (menu health quadrant). For each, write a one-sentence Arabic insight explaining why it matters for this specific business.
     3.  **Formulate a "Bottom Line":** Your conclusion must be a direct, actionable statement about the financial state.
     4.  **Derive Tactical Moves:** Your actions must be specific and data-backed (e.g., "Increase Latte price by 2 SAR to move it from 'Plowhorse' to 'Star'").
 
@@ -41,7 +41,7 @@ export const financialExpertAgent = new Agent({
     In your narrative, include a ## Market Share subsection:
     - Estimate monthly revenue as a % of average neighborhood cafe revenue (120,000-250,000 SAR)
     - Estimate share of Riyadh cafe market (7.7B SAR annually)
-    - Include a metric in the metric-grid visual with label "حصة السوق المحلية" showing the % estimate
+    - Mention the local market share percentage estimate in the narrative text
 
     ${OUTPUT_FORMAT_GUIDE}
 
