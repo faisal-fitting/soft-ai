@@ -109,6 +109,7 @@ export const postSchema = z.object({
 export const instagramProfileSchema = z.object({
   username: z.string(),
   profileUrl: z.string().optional(), // canonical profile URL
+  profilePicUrl: z.string().optional(), // profile picture URL
   fullName: z.string().optional(),
   bio: z.string().optional(),
   followers: z.number().optional(),
@@ -130,6 +131,7 @@ export const instagramProfileSchema = z.object({
 export const tiktokProfileSchema = z.object({
   username: z.string(),
   profileUrl: z.string().optional(), // canonical profile URL — extracted from video share_url when possible
+  profilePicUrl: z.string().optional(), // profile picture URL
   displayName: z.string().optional(),
   bio: z.string().optional(),
   followers: z.number().optional(),

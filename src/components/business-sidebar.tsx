@@ -1,6 +1,7 @@
 "use client";
 
-import { MapPin, Star, Activity } from "lucide-react";
+import { useState } from "react";
+import { MapPin, Star, Activity, Phone, Globe, Clock, ChevronDown, ChevronUp } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -12,26 +13,38 @@ import {
   SidebarGroupContent,
   SidebarGroupLabel,
 } from "@/components/ui/sidebar";
-import type { ReportManifest } from "@/lib/types";
+import type { ReportManifest, CollectedData } from "@/lib/types";
 import { MessageResponse } from "./ai-elements/message";
 
 const STATUS_CFG = {
-  EXCEPTIONAL: { label: "استثنائي", variant: "default" as const, cls: "bg-emerald-500 text-white" },
-  HEALTHY:     { label: "صحي",      variant: "default" as const, cls: "bg-blue-500 text-white"    },
-  WARNING:     { label: "تحذير",    variant: "default" as const, cls: "bg-amber-500 text-white"   },
-  CRITICAL:    { label: "حرج",      variant: "destructive" as const, cls: ""                      },
+  EXCEPTIONAL: { label: "استثنائي", cls: "bg-emerald-500 text-white" },
+  HEALTHY:     { label: "صحي",      cls: "bg-blue-500 text-white"    },
+  WARNING:     { label: "تحذير",    cls: "bg-amber-500 text-white"   },
+  CRITICAL:    { label: "حرج",      cls: "bg-red-500 text-white"     },
 } as const;
+
+const PRICE_LABELS: Record<string, string> = {
+  PRICE_LEVEL_FREE:           'مجاني',
+  PRICE_LEVEL_INEXPENSIVE:    '＄ اقتصادي',
+  PRICE_LEVEL_MODERATE:       '＄＄ متوسط',
+  PRICE_LEVEL_EXPENSIVE:      '＄＄＄ غالي',
+  PRICE_LEVEL_VERY_EXPENSIVE: '＄＄＄＄ فاخر',
+};
 
 interface Props {
   manifest: ReportManifest | null;
   isGenerating: boolean;
+  collectedData: CollectedData | null;
 }
 
-export function BusinessSidebar({ manifest, isGenerating }: Props) {
+export function BusinessSidebar({ manifest, isGenerating, collectedData }: Props) {
   const meta = manifest?.metadata;
   const directive = manifest?.directive;
   const status = directive?.overallStatus;
   const statusCfg = status ? STATUS_CFG[status] : null;
+  const pd = collectedData?.placeDetails;
+
+  const [hoursOpen, setHoursOpen] = useState(false);
 
   return (
     <Sidebar side="left" dir="rtl" collapsible="none">
@@ -48,22 +61,13 @@ export function BusinessSidebar({ manifest, isGenerating }: Props) {
           <SidebarGroup>
             <SidebarGroupContent>
               <div className="space-y-3 px-1 py-2">
-                {/* Photo skeleton */}
                 <Skeleton className="h-32 w-full rounded-lg" />
-
-                {/* Name + badge */}
                 <div className="flex items-center justify-between gap-2">
                   <Skeleton className="h-5 w-32" />
                   <Skeleton className="h-5 w-14 rounded-full" />
                 </div>
-
-                {/* Address */}
                 <Skeleton className="h-4 w-full" />
-
-                {/* Rating */}
                 <Skeleton className="h-4 w-20" />
-
-                {/* Health score card */}
                 <div className="rounded-lg border bg-background p-3 space-y-2">
                   <div className="flex items-center justify-between">
                     <Skeleton className="h-4 w-20" />
@@ -71,8 +75,6 @@ export function BusinessSidebar({ manifest, isGenerating }: Props) {
                   </div>
                   <Skeleton className="h-1.5 w-full rounded-full" />
                 </div>
-
-                {/* North star card */}
                 <div className="rounded-lg border bg-background p-3 space-y-2">
                   <Skeleton className="h-3 w-24" />
                   <Skeleton className="h-7 w-16" />
@@ -106,12 +108,14 @@ export function BusinessSidebar({ manifest, isGenerating }: Props) {
                   <Badge className={statusCfg.cls}>{statusCfg.label}</Badge>
                 )}
               </div>
+
               {meta.address && (
                 <div className="flex items-center gap-1 text-sm text-muted-foreground">
                   <MapPin className="size-3 shrink-0" />
                   <span className="line-clamp-2">{meta.address}</span>
                 </div>
               )}
+
               {(meta.rating != null || meta.reviewCount != null) && (
                 <div className="flex items-center gap-2 text-sm">
                   {meta.rating != null && (
@@ -124,6 +128,59 @@ export function BusinessSidebar({ manifest, isGenerating }: Props) {
                     <span className="text-muted-foreground">
                       ({meta.reviewCount.toLocaleString()} تقييم)
                     </span>
+                  )}
+                </div>
+              )}
+
+              {/* Place details — phone / website / price / hours */}
+              {pd && (
+                <div className="pt-1 space-y-1">
+                  {pd.phone && (
+                    <a
+                      href={`tel:${pd.phone}`}
+                      className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      <Phone className="size-3 shrink-0" />
+                      <span dir="ltr">{pd.phone}</span>
+                    </a>
+                  )}
+                  {pd.website && (
+                    <a
+                      href={pd.website}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      <Globe className="size-3 shrink-0" />
+                      <span className="line-clamp-1 break-all">{pd.website.replace(/^https?:\/\//, '').replace(/\/$/, '')}</span>
+                    </a>
+                  )}
+                  {pd.priceLevel && (
+                    <p className="text-sm text-muted-foreground">
+                      {PRICE_LABELS[pd.priceLevel] ?? pd.priceLevel}
+                    </p>
+                  )}
+                  {pd.openingHours && pd.openingHours.length > 0 && (
+                    <div>
+                      <button
+                        onClick={() => setHoursOpen(v => !v)}
+                        className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        <Clock className="size-3 shrink-0" />
+                        <span>أوقات العمل</span>
+                        {hoursOpen
+                          ? <ChevronUp className="size-3" />
+                          : <ChevronDown className="size-3" />
+                        }
+                      </button>
+                      {hoursOpen && (
+                        <ul className="mt-1 space-y-0.5 pr-5">
+                          {pd.openingHours.map((day, i) => (
+                            <li key={i} className="text-xs text-muted-foreground">{day}</li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
                   )}
                 </div>
               )}

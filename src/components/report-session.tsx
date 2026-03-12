@@ -7,14 +7,14 @@ import { DefaultChatTransport } from "ai";
 import { motion, AnimatePresence } from "motion/react";
 import { Loader2, XCircle } from "lucide-react";
 
-import { getWorkflowRun, saveThreadTitle } from "@/app/actions";
+import { getWorkflowRun, getCollectedData, saveThreadTitle } from "@/app/actions";
 import { useReportStore } from "@/store/report-store";
 import { BusinessSidebar } from "@/components/business-sidebar";
 import { ChatSidebar } from "@/components/chat-sidebar";
 import { ReportView } from "@/components/report-view";
 import { BusinessForm, type FinancialFormData } from "@/components/business-form";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
-import type { ReportManifest, StepProgress } from "@/lib/types";
+import type { ReportManifest, CollectedData, StepProgress } from "@/lib/types";
 
 interface Props {
   sessionKey: number;
@@ -28,6 +28,7 @@ export function ReportSession({ sessionKey, urlRunId }: Props) {
   const businessName = store.businessName;
 
   const [manifest, setManifest] = useState<ReportManifest | null>(null);
+  const [collectedData, setCollectedData] = useState<CollectedData | null>(null);
   const [workflowProgress, setWorkflowProgress] = useState<StepProgress | null>(null);
   const [loadingHistory, setLoadingHistory] = useState(true);
   const [restoreError, setRestoreError] = useState<string | null>(null);
@@ -72,6 +73,10 @@ export function ReportSession({ sessionKey, urlRunId }: Props) {
             console.log("[workflow:finish] manifest valid — rendering report");
             setManifest(manifest as ReportManifest);
             setWorkflowProgress(null);
+            // Fetch collected data from workflow step results
+            if (store.runId || part.id) {
+              getCollectedData(store.runId || part.id).then(setCollectedData).catch(console.error);
+            }
           } else {
             console.warn("[workflow:finish] manifest shape invalid", manifest);
           }
@@ -95,10 +100,14 @@ export function ReportSession({ sessionKey, urlRunId }: Props) {
       return;
     }
 
-    getWorkflowRun(urlRunId)
-      .then((restoredManifest) => {
+    Promise.all([
+      getWorkflowRun(urlRunId),
+      getCollectedData(urlRunId),
+    ])
+      .then(([restoredManifest, restoredCollected]) => {
         if (restoredManifest) {
           setManifest(restoredManifest);
+          setCollectedData(restoredCollected);
           if (!store.phase || store.phase === "form") {
             store.startReport(urlRunId, store.threadId ?? "", store.businessName ?? "");
           }
@@ -171,7 +180,7 @@ export function ReportSession({ sessionKey, urlRunId }: Props) {
       style={{ "--sidebar-width": "16rem" } as React.CSSProperties}
       className="min-h-0 overflow-hidden"
     >
-      <BusinessSidebar manifest={manifest} isGenerating={workflowRunning} />
+      <BusinessSidebar manifest={manifest} isGenerating={workflowRunning} collectedData={collectedData} />
 
       <SidebarInset className="overflow-hidden">
         <AnimatePresence mode="wait">
@@ -197,6 +206,7 @@ export function ReportSession({ sessionKey, urlRunId }: Props) {
             >
               <ReportView
                 manifest={manifest ?? undefined}
+                collectedData={collectedData ?? undefined}
                 isGenerating={showProgress}
                 businessName={businessName ?? ""}
                 progressMessage={workflowProgress?.message}

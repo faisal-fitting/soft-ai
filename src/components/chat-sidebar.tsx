@@ -139,7 +139,7 @@ export function ChatSidebar({ businessName, hasReport }: Props) {
                         dir="rtl"
                         className="min-w-0 overflow-hidden"
                       >
-                        <MessageContent className="min-w-0 overflow-hidden [overflow-wrap:anywhere]">
+                        <MessageContent className="min-w-0 overflow-hidden wrap-anywhere">
                           {msg.role === "assistant" ? (
                             <MessageResponse>{text}</MessageResponse>
                           ) : (

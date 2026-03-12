@@ -150,6 +150,7 @@ function computeInstagramMetrics(
   return {
     username:          igUsername,
     profileUrl:        `https://www.instagram.com/${igUsername}/`,
+    profilePicUrl:     user.profile_pic_url_hd ?? user.profile_pic_url,
     fullName:          user.full_name,
     bio:               user.biography,
     followers:         followers || undefined,
@@ -236,10 +237,11 @@ function computeTikTokMetrics(
 
   console.log(`[social-scraper] TikTok @${ttUsername} — followers: ${followers ?? 'n/a'}`);
   return {
-    username:    ttUsername,
-    profileUrl:  ttProfileUrl,
-    displayName: user.nickname,
-    bio:         user.signature,
+    username:      ttUsername,
+    profileUrl:    ttProfileUrl,
+    profilePicUrl: user.avatarLarger ?? user.avatarMedium ?? user.avatarThumb,
+    displayName:   user.nickname,
+    bio:           user.signature,
     followers,
     following:   stats.followingCount,
     likes:       stats.heartCount,
@@ -276,6 +278,7 @@ export const socialMediaScraperTool = createTool({
         instagram: {
           username: igHandle,
           profileUrl: `https://www.instagram.com/${igHandle}/`,
+          profilePicUrl: `https://ui-avatars.com/api/?name=${encodeURIComponent(igHandle)}&background=E1306C&color=fff&size=128`,
           followers: 48770,
           following: 312,
           postsCount: 184,
@@ -301,6 +304,7 @@ export const socialMediaScraperTool = createTool({
         tiktok: {
           username: ttHandle,
           profileUrl: `https://www.tiktok.com/@${ttHandle}`,
+          profilePicUrl: `https://ui-avatars.com/api/?name=${encodeURIComponent(ttHandle)}&background=010101&color=fff&size=128`,
           followers: 12400,
           following: 88,
           likes: 94000,
