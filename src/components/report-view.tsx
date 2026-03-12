@@ -4,7 +4,6 @@ import {
   TrendingUp,
   TrendingDown,
   Minus,
-  Loader2,
   Target,
   AlertTriangle,
   CheckCircle2,
@@ -1222,26 +1221,17 @@ function SectionWithData({
 
 // ── Report View (Main) ─────────────────────────────────────────────────────
 
-const PLACEHOLDER_TABS = [
-  { id: "financials",  label: "التحليل المالي" },
-  { id: "digital",     label: "الحضور الرقمي"  },
-  { id: "market",      label: "تحليل السوق"    },
-  { id: "action-plan", label: "خطة العمل"      },
-  { id: "performance", label: "مراقبة الأداء"  },
-];
 
 export function ReportView({
   manifest,
   collectedData,
   isGenerating,
   businessName,
-  progressMessage,
 }: {
   manifest?: ReportManifest;
   collectedData?: CollectedData;
   isGenerating: boolean;
   businessName: string;
-  progressMessage?: string;
 }) {
   const sections = manifest?.sections ?? [];
 
@@ -1249,34 +1239,6 @@ export function ReportView({
     return (
       <div className="flex flex-1 items-center justify-center text-muted-foreground">
         <p className="text-sm">لا يوجد تقرير بعد</p>
-      </div>
-    );
-  }
-
-  if (!manifest && isGenerating) {
-    return (
-      <div className="flex flex-1 flex-col overflow-hidden">
-        <div className="px-4 py-2 pointer-events-none select-none opacity-40">
-          <div className="bg-muted rounded-lg p-[3px] flex items-center w-full justify-start h-auto flex-wrap gap-0.5">
-            {PLACEHOLDER_TABS.map((tab) => (
-              <div
-                key={tab.id}
-                className="inline-flex items-center gap-2 rounded-md px-2 py-1 text-sm font-medium text-muted-foreground"
-              >
-                <TabIcon sectionId={tab.id} />
-                {tab.label}
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="flex flex-1 flex-col items-center justify-center px-8 py-16 text-center">
-          <div className="mb-6 flex size-16 items-center justify-center rounded-full border-2 border-primary/20 bg-primary/5">
-            <Loader2 className="size-8 animate-spin text-primary" />
-          </div>
-          <h2 className="mb-2 text-xl font-bold">جارٍ تحليل {businessName}</h2>
-          <p className="text-muted-foreground">{progressMessage ?? "يتم جمع البيانات وتحليلها…"}</p>
-        </div>
       </div>
     );
   }

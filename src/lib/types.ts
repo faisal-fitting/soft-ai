@@ -92,10 +92,68 @@ export type ReportManifest = {
   sections: ReportSection[];
 };
 
+// ── Step Progress Preview Payloads ───────────────────────────────────────────
+
+export type ProgressPreviewFinancials = {
+  netRevenue: number;
+  grossMargin: number;
+  breakEvenRevenue: number;
+};
+
+export type ProgressPreviewLocation = {
+  lat: number;
+  lon: number;
+  businessName: string;
+  address?: string;
+  rating?: number;
+  radius: number;
+  staticMapUrl?: string;
+  competitors?: Array<{ name: string; lat: number; lon: number; rating?: number }>;
+};
+
+export type ProgressPreviewReviews = {
+  totalCount: number;
+  samples: Array<{ authorName: string; rating: number; snippet?: string; profilePhoto?: string }>;
+};
+
+export type ProgressPreviewSocial = {
+  instagram?: { username: string; followers?: number; engagementRate?: number };
+  tiktok?: { username: string; followers?: number; engagementRate?: number };
+};
+
+export type ProgressPreviewAnalysis = {
+  sentimentScore: number;
+  topThemes: Array<{ topic: string; sentiment: "positive" | "negative" | "neutral" }>;
+  healthScore?: number;
+};
+
+export type ProgressPreviewStrategy = {
+  northStarName: string;
+  northStarValue: number;
+  northStarTarget: number;
+  overallStatus: "CRITICAL" | "WARNING" | "HEALTHY" | "EXCEPTIONAL";
+  focusAreas: { financial: string; digital: string; market: string };
+};
+
+export type ProgressPreviewExperts = {
+  completed: Array<"financial" | "digital" | "market">;
+};
+
+export type ProgressPreview =
+  | ProgressPreviewFinancials
+  | ProgressPreviewLocation
+  | ProgressPreviewReviews
+  | ProgressPreviewSocial
+  | ProgressPreviewAnalysis
+  | ProgressPreviewStrategy
+  | ProgressPreviewExperts;
+
 export type StepProgress = {
   step: string;
+  phase: number; // 1–8 UI narrative phase
   status: "running" | "complete";
   message: string;
+  preview?: ProgressPreview;
 };
 
 // ── Collected Data (raw workflow step outputs surfaced for the UI) ─────────────

@@ -13,6 +13,7 @@ import { BusinessSidebar } from "@/components/business-sidebar";
 import { ChatSidebar } from "@/components/chat-sidebar";
 import { ReportView } from "@/components/report-view";
 import { BusinessForm, type FinancialFormData } from "@/components/business-form";
+import { GenerationProgress } from "@/components/generation-progress";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import type { ReportManifest, CollectedData, StepProgress } from "@/lib/types";
 
@@ -29,14 +30,16 @@ export function ReportSession({ sessionKey, urlRunId }: Props) {
 
   const [manifest, setManifest] = useState<ReportManifest | null>(null);
   const [collectedData, setCollectedData] = useState<CollectedData | null>(null);
-  const [workflowProgress, setWorkflowProgress] = useState<StepProgress | null>(null);
+  // Accumulate all progress events so the GenerationProgress component can build
+  // a full picture of every phase — not just the latest event.
+  const [progressHistory, setProgressHistory] = useState<StepProgress[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(true);
   const [restoreError, setRestoreError] = useState<string | null>(null);
 
   const pendingFormData = useRef<FinancialFormData | null>(null);
   const pendingThreadId = useRef<string | null>(null);
 
-  // ── Workflow transport ─────────────────────────────────────────────────────
+  // ── Workflow transport ──────────────────────────────────────────────────────
   const workflowTransport = useMemo(
     () =>
       new DefaultChatTransport({
@@ -55,7 +58,7 @@ export function ReportSession({ sessionKey, urlRunId }: Props) {
       console.log("[workflow:onData]", part.type, part.data?.status ?? "");
 
       if (part.type === "data-step-progress") {
-        setWorkflowProgress(part.data as StepProgress);
+        setProgressHistory((prev) => [...prev, part.data as StepProgress]);
       }
 
       if (part.type === "data-workflow") {
@@ -72,8 +75,7 @@ export function ReportSession({ sessionKey, urlRunId }: Props) {
           if (manifest?.metadata && manifest?.directive && manifest?.sections) {
             console.log("[workflow:finish] manifest valid — rendering report");
             setManifest(manifest as ReportManifest);
-            setWorkflowProgress(null);
-            // Fetch collected data from workflow step results
+            setProgressHistory([]);
             if (store.runId || part.id) {
               getCollectedData(store.runId || part.id).then(setCollectedData).catch(console.error);
             }
@@ -86,14 +88,13 @@ export function ReportSession({ sessionKey, urlRunId }: Props) {
     onFinish: ({ isError }: { isError?: boolean }) => {
       console.log("[workflow:onFinish]", { isError });
       if (isError) console.error("[workflow] stream ended with error");
-      setWorkflowProgress(null);
+      setProgressHistory([]);
     },
     onError: (err: unknown) => console.error("[workflow:error]", err),
   });
 
   // ── Restore manifest on mount ────────────────────────────────────────────────
   useEffect(() => {
-    // Only restore from URL param — no URL param means show the form
     if (!urlRunId) {
       store.reset();
       setLoadingHistory(false);
@@ -126,20 +127,7 @@ export function ReportSession({ sessionKey, urlRunId }: Props) {
 
   const workflowRunning = workflowStatus === "submitted" || workflowStatus === "streaming";
   const hasReport = !!manifest;
-
-  const handleFormSubmit = useCallback(
-    async (data: FinancialFormData) => {
-      const newThreadId = crypto.randomUUID();
-      pendingFormData.current = data;
-      pendingThreadId.current = newThreadId;
-      store.startReport("", newThreadId, data.businessName);
-      saveThreadTitle(newThreadId, data.businessName).catch(console.error);
-      await workflowSend({ text: "" });
-    },
-    [store, workflowSend]
-  );
-
-  const showProgress = (workflowRunning || !!workflowProgress) && !manifest;
+  const showProgress = (workflowRunning || progressHistory.length > 0) && !manifest;
 
   if (loadingHistory) {
     return (
@@ -174,6 +162,15 @@ export function ReportSession({ sessionKey, urlRunId }: Props) {
     );
   }
 
+  const handleFormSubmit = async (data: FinancialFormData) => {
+    const newThreadId = crypto.randomUUID();
+    pendingFormData.current = data;
+    pendingThreadId.current = newThreadId;
+    store.startReport("", newThreadId, data.businessName);
+    saveThreadTitle(newThreadId, data.businessName).catch(console.error);
+    await workflowSend({ text: "" });
+  };
+
   return (
     <SidebarProvider
       defaultOpen={hasReport}
@@ -195,21 +192,34 @@ export function ReportSession({ sessionKey, urlRunId }: Props) {
             >
               <BusinessForm onSubmit={handleFormSubmit} isSubmitting={workflowRunning} />
             </motion.div>
+          ) : showProgress ? (
+            <motion.div
+              key={`progress-${sessionKey}`}
+              className="flex flex-1 overflow-hidden"
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -16 }}
+              transition={{ duration: 0.35, ease: "easeOut" }}
+            >
+              <GenerationProgress
+                businessName={businessName ?? ""}
+                progressHistory={progressHistory}
+              />
+            </motion.div>
           ) : (
             <motion.div
               key={`report-${sessionKey}`}
               className="flex flex-1 overflow-hidden"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0 }}
-              transition={{ duration: 0.3 }}
+              transition={{ duration: 0.4, ease: "easeOut" }}
             >
               <ReportView
                 manifest={manifest ?? undefined}
                 collectedData={collectedData ?? undefined}
-                isGenerating={showProgress}
+                isGenerating={false}
                 businessName={businessName ?? ""}
-                progressMessage={workflowProgress?.message}
               />
             </motion.div>
           )}

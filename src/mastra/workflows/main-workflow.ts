@@ -75,7 +75,25 @@ const collectFinancials = createStep({
   description: 'Compute deterministic financial KPIs',
   inputSchema: workflowInputSchema,
   outputSchema: financialOutputSchema,
-  execute: async ({ inputData }) => computeFinancials(inputData),
+  execute: async ({ inputData, writer }) => {
+    await writer?.write({ type: 'data-step-progress', data: { step: 'collect-financials', phase: 1, status: 'running', message: 'جاري حساب المؤشرات المالية...' } });
+    const result = computeFinancials(inputData);
+    await writer?.write({
+      type: 'data-step-progress',
+      data: {
+        step: 'collect-financials',
+        phase: 1,
+        status: 'complete',
+        message: 'تم حساب المؤشرات المالية',
+        preview: {
+          netRevenue: result.netRevenue,
+          grossMargin: result.grossMargin,
+          breakEvenRevenue: result.breakEvenRevenue,
+        },
+      },
+    });
+    return result;
+  },
 });
 
 const fetchPlaceDetails = createStep({
@@ -84,14 +102,33 @@ const fetchPlaceDetails = createStep({
   inputSchema: financialOutputSchema,
   outputSchema: placeEnrichedSchema,
   execute: async ({ inputData, requestContext, writer }) => {
-    await writer?.write({ type: 'data-step-progress', data: { step: 'place-details', status: 'running', message: 'جاري جلب معلومات الموقع...' } });
+    await writer?.write({ type: 'data-step-progress', data: { step: 'place-details', phase: 2, status: 'running', message: 'جاري جلب معلومات الموقع...' } });
     const result = await getPlaceDetails.execute!({ place_id: inputData.placeId }, { requestContext }) as any;
     const lat = result.location?.latitude;
     const lon = result.location?.longitude;
     const apiTypes = (result.types ?? []).filter((t: string) => FOOD_TYPES.has(t));
     const includedTypes = apiTypes.length > 0 ? apiTypes : (TYPE_MAP[inputData.businessType] ?? ['cafe', 'coffee_shop']);
     const radius = RADIUS_MAP[inputData.businessType] ?? 1000;
-    await writer?.write({ type: 'data-step-progress', data: { step: 'place-details', status: 'complete', message: 'تم جلب معلومات الموقع' } });
+    await writer?.write({
+      type: 'data-step-progress',
+      data: {
+        step: 'place-details',
+        phase: 2,
+        status: 'complete',
+        message: 'تم جلب معلومات الموقع',
+        preview: {
+          lat,
+          lon,
+          businessName: inputData.businessName,
+          address: result.formattedAddress,
+          rating: result.rating,
+          radius,
+          staticMapUrl: lat && lon
+            ? `https://maps.googleapis.com/maps/api/staticmap?center=${lat},${lon}&zoom=15&size=600x300&scale=2&markers=color:red%7C${lat},${lon}&key=${process.env.GOOGLE_PLACES_API_KEY || ''}`
+            : undefined,
+        },
+      },
+    });
     return { ...inputData, placeDetails: result, lat, lon, includedTypes, radius };
   },
 });
@@ -103,10 +140,27 @@ const fetchNearbyCompetitors = createStep({
   outputSchema: z.object({ nearbyCompetitors: z.array(nearbyPlaceSchema) }),
   execute: async ({ inputData, requestContext, writer }) => {
     if (inputData.lat == null || inputData.lon == null) return { nearbyCompetitors: [] };
-    await writer?.write({ type: 'data-step-progress', data: { step: 'competitors', status: 'running', message: 'جاري البحث عن المنافسين...' } });
+    await writer?.write({ type: 'data-step-progress', data: { step: 'competitors', phase: 2, status: 'running', message: 'جاري البحث عن المنافسين...' } });
     const result = await getNearbyPlaces.execute!({ lat: inputData.lat, lon: inputData.lon, radius: inputData.radius, includedTypes: inputData.includedTypes }, { requestContext }) as any;
-    await writer?.write({ type: 'data-step-progress', data: { step: 'competitors', status: 'complete', message: 'تم تحليل المنافسين' } });
-    return { nearbyCompetitors: result.places ?? [] };
+    const places: any[] = result.places ?? [];
+    await writer?.write({
+      type: 'data-step-progress',
+      data: {
+        step: 'competitors',
+        phase: 2,
+        status: 'complete',
+        message: 'تم تحليل المنافسين',
+        preview: {
+          competitors: places.slice(0, 10).map((p: any) => ({
+            name: p.displayName?.text ?? '',
+            lat: p.location?.latitude,
+            lon: p.location?.longitude,
+            rating: p.rating,
+          })),
+        },
+      },
+    });
+    return { nearbyCompetitors: places };
   },
 });
 
@@ -116,9 +170,27 @@ const fetchTargetReviews = createStep({
   inputSchema: placeEnrichedSchema,
   outputSchema: z.object({ reviews: reviewsResponseSchema }),
   execute: async ({ inputData, requestContext, writer }) => {
-    await writer?.write({ type: 'data-step-progress', data: { step: 'reviews', status: 'running', message: 'جاري جلب التقييمات...' } });
+    await writer?.write({ type: 'data-step-progress', data: { step: 'reviews', phase: 3, status: 'running', message: 'جاري جلب التقييمات...' } });
     const result = await googleMapsReviewsTool.execute!({ place_id: inputData.placeId, language: 'ar', sort_by: 'newestFirst' }, { requestContext }) as any;
-    await writer?.write({ type: 'data-step-progress', data: { step: 'reviews', status: 'complete', message: 'تم جلب التقييمات' } });
+    const reviews: any[] = result?.reviews ?? [];
+    await writer?.write({
+      type: 'data-step-progress',
+      data: {
+        step: 'reviews',
+        phase: 3,
+        status: 'complete',
+        message: `تم جلب ${reviews.length} تقييم`,
+        preview: {
+          totalCount: reviews.length,
+          samples: reviews.slice(0, 5).map((r: any) => ({
+            authorName: r.author_name ?? r.authorAttribution?.displayName ?? 'مجهول',
+            rating: r.rating ?? 0,
+            snippet: r.snippet ?? r.extracted_snippet?.original ?? r.text?.slice(0, 120),
+            profilePhoto: r.profile_photo_url ?? r.authorAttribution?.photoUri,
+          })),
+        },
+      },
+    });
     return { reviews: result };
   },
 });
@@ -132,7 +204,7 @@ const fetchCompetitorReviews = createStep({
     const competitors: z.infer<typeof nearbyPlaceSchema>[] = inputData['fetch-nearby-competitors']?.nearbyCompetitors ?? [];
     if (!competitors.length) return { competitorReviews: [] };
 
-    await writer?.write({ type: 'data-step-progress', data: { step: 'competitor-reviews', status: 'running', message: 'جاري جلب تقييمات المنافسين...' } });
+    await writer?.write({ type: 'data-step-progress', data: { step: 'competitor-reviews', phase: 3, status: 'running', message: 'جاري جلب تقييمات المنافسين...' } });
 
     // Pick top 3 by (rating * reviewCount) — most established competitors
     const top3 = [...competitors]
@@ -164,7 +236,7 @@ const fetchCompetitorReviews = createStep({
       .filter((r): r is PromiseFulfilledResult<any> => r.status === 'fulfilled')
       .map(r => r.value);
 
-    await writer?.write({ type: 'data-step-progress', data: { step: 'competitor-reviews', status: 'complete', message: `تم جلب تقييمات ${competitorReviews.length} منافس` } });
+    await writer?.write({ type: 'data-step-progress', data: { step: 'competitor-reviews', phase: 3, status: 'complete', message: `تم جلب تقييمات ${competitorReviews.length} منافس` } });
     return { competitorReviews };
   },
 });
@@ -175,14 +247,31 @@ const fetchSocialData = createStep({
   inputSchema: z.record(z.string(), z.any()),
   outputSchema: z.object({ socialData: socialDataSchema }),
   execute: async ({ inputData, requestContext, writer }) => {
-    if (!inputData.instagramUser && !inputData.tiktokUser) return { socialData: { instagram: { username: '' }, tiktok: { username: '' } } as any };
-    await writer?.write({ type: 'data-step-progress', data: { step: 'social', status: 'running', message: 'جاري تحليل وسائل التواصل...' } });
+    if (!inputData.instagramUser && !inputData.tiktokUser) {
+      await writer?.write({ type: 'data-step-progress', data: { step: 'social', phase: 4, status: 'complete', message: 'لا توجد حسابات تواصل اجتماعي' } });
+      return { socialData: { instagram: { username: '' }, tiktok: { username: '' } } as any };
+    }
+    await writer?.write({ type: 'data-step-progress', data: { step: 'social', phase: 4, status: 'running', message: 'جاري تحليل وسائل التواصل...' } });
     try {
       const result = await socialMediaScraperTool.execute!({ instagram_user: inputData.instagramUser ?? '', tiktok_user: inputData.tiktokUser ?? '' }, { requestContext }) as any;
-      await writer?.write({ type: 'data-step-progress', data: { step: 'social', status: 'complete', message: 'تم تحليل وسائل التواصل' } });
+      const ig = result?.instagram;
+      const tt = result?.tiktok;
+      await writer?.write({
+        type: 'data-step-progress',
+        data: {
+          step: 'social',
+          phase: 4,
+          status: 'complete',
+          message: 'تم تحليل وسائل التواصل',
+          preview: {
+            instagram: ig?.username ? { username: ig.username, followers: ig.followers, engagementRate: ig.engagement_rate } : undefined,
+            tiktok: tt?.username ? { username: tt.username, followers: tt.followers, engagementRate: tt.engagement_rate } : undefined,
+          },
+        },
+      });
       return { socialData: result };
     } catch (err) {
-      await writer?.write({ type: 'data-step-progress', data: { step: 'social', status: 'complete', message: 'فشل تحليل وسائل التواصل' } });
+      await writer?.write({ type: 'data-step-progress', data: { step: 'social', phase: 4, status: 'complete', message: 'فشل تحليل وسائل التواصل' } });
       return { socialData: { instagram: { username: inputData.instagramUser ?? '' }, tiktok: { username: inputData.tiktokUser ?? '' }, note: 'Fetch failed' } as any };
     }
   },
@@ -193,7 +282,8 @@ const runSemanticAnalysis = createStep({
     description: 'Extract structured themes from reviews',
     inputSchema: z.record(z.string(), z.any()),
     outputSchema: semanticAnalysisOutputSchema,
-    execute: async ({ inputData, mastra }) => {
+    execute: async ({ inputData, mastra, writer }) => {
+        await writer?.write({ type: 'data-step-progress', data: { step: 'semantic-analysis', phase: 5, status: 'running', message: 'جاري تحليل المراجعات بالذكاء الاصطناعي...' } });
         const agent = mastra?.getAgent('semanticAnalysisAgent');
         if (!agent) throw new Error('semanticAnalysisAgent not found');
         const response = await agent.generate(`Analyze reviews:\n${toYaml(inputData.reviews.reviews.slice(0, 20))}`, {
@@ -203,7 +293,21 @@ const runSemanticAnalysis = createStep({
                 fallbackValue: { sentimentScore: 50, themes: [], criticalWeakness: 'Analysis failed' }
             }
         });
-        return response.object;
+        const result = response.object;
+        await writer?.write({
+            type: 'data-step-progress',
+            data: {
+                step: 'semantic-analysis',
+                phase: 5,
+                status: 'complete',
+                message: 'تم تحليل المراجعات',
+                preview: {
+                    sentimentScore: result.sentimentScore,
+                    topThemes: (result.themes ?? []).slice(0, 4).map((t: any) => ({ topic: t.topic, sentiment: t.sentiment })),
+                },
+            },
+        });
+        return result;
     }
 });
 
@@ -212,7 +316,8 @@ const runSocialAudit = createStep({
     description: 'Extract structured metrics from social data',
     inputSchema: z.record(z.string(), z.any()),
     outputSchema: socialAuditOutputSchema,
-    execute: async ({ inputData, mastra }) => {
+    execute: async ({ inputData, mastra, writer }) => {
+        await writer?.write({ type: 'data-step-progress', data: { step: 'social-audit', phase: 5, status: 'running', message: 'جاري تدقيق وسائل التواصل...' } });
         const agent = mastra?.getAgent('socialEngagementAuditor');
         if (!agent) throw new Error('socialEngagementAuditor not found');
         const response = await agent.generate(`Audit social data:\n${toYaml(inputData.socialData)}`, {
@@ -222,7 +327,9 @@ const runSocialAudit = createStep({
                 fallbackValue: { healthScore: 5, platformBenchmarks: [], contentStrategyGap: 'N/A', viralitySignals: { shareToImpressionRatio: 0, growthPotential: 'low' } }
             }
         });
-        return response.object;
+        const result = response.object;
+        await writer?.write({ type: 'data-step-progress', data: { step: 'social-audit', phase: 5, status: 'complete', message: 'تم تدقيق وسائل التواصل' } });
+        return result;
     }
 });
 
@@ -237,7 +344,7 @@ const generateStrategicDirective = createStep({
     const agent = mastra?.getAgent('cboAgent');
     if (!agent) throw new Error('cboAgent not found');
 
-    await writer?.write({ type: 'data-step-progress', data: { step: 'directive', status: 'running', message: 'جاري تحليل الاستراتيجية...' } });
+    await writer?.write({ type: 'data-step-progress', data: { step: 'directive', phase: 6, status: 'running', message: 'جاري بناء التوجه الاستراتيجي...' } });
     const prompt = `Analyze this business and set the strategic directive:\n${JSON.stringify(inputData)}`;
     
     const response = await agent.generate(prompt, {
@@ -252,8 +359,24 @@ const generateStrategicDirective = createStep({
         },
       },
     });
-    await writer?.write({ type: 'data-step-progress', data: { step: 'directive', status: 'complete', message: 'تم تحديد التوجه الاستراتيجي' } });
-    return response.object;
+    const directive = response.object;
+    await writer?.write({
+      type: 'data-step-progress',
+      data: {
+        step: 'directive',
+        phase: 6,
+        status: 'complete',
+        message: 'تم تحديد التوجه الاستراتيجي',
+        preview: {
+          northStarName: directive.northStarMetric?.name,
+          northStarValue: directive.northStarMetric?.value,
+          northStarTarget: directive.northStarMetric?.target,
+          overallStatus: directive.overallStatus,
+          focusAreas: directive.focusAreas,
+        },
+      },
+    });
+    return directive;
   },
 });
 
@@ -265,7 +388,7 @@ const generateFinancialSection = createStep({
   inputSchema: expertInputSchema,
   outputSchema: reportSectionSchema,
   execute: async ({ inputData, mastra, writer }) => {
-    await writer?.write({ type: 'data-step-progress', data: { step: 'financials', status: 'running', message: 'جاري تحليل الوضع المالي...' } });
+    await writer?.write({ type: 'data-step-progress', data: { step: 'financials', phase: 7, status: 'running', message: 'جاري تحليل الوضع المالي...' } });
     const agent = mastra?.getAgent('financialExpertAgent');
     const prompt = `## Context
 You are a financial analyst specializing in Saudi F&B businesses.
@@ -307,7 +430,7 @@ Focus on profitability, break-even analysis, cost optimization, and menu enginee
       }
     });
     
-    await writer?.write({ type: 'data-step-progress', data: { step: 'financials', status: 'complete', message: 'تم تحليل الوضع المالي' } });
+    await writer?.write({ type: 'data-step-progress', data: { step: 'financials', phase: 7, status: 'complete', message: 'تم تحليل الوضع المالي', preview: { completed: ['financial'] } } });
     return response.object;
   },
 });
@@ -318,7 +441,7 @@ const generateDigitalSection = createStep({
   inputSchema: expertInputSchema,
   outputSchema: reportSectionSchema,
   execute: async ({ inputData, mastra, writer }) => {
-    await writer?.write({ type: 'data-step-progress', data: { step: 'digital', status: 'running', message: 'جاري تحليل الحضور الرقمي...' } });
+    await writer?.write({ type: 'data-step-progress', data: { step: 'digital', phase: 7, status: 'running', message: 'جاري تحليل الحضور الرقمي...' } });
     const agent = mastra?.getAgent('digitalExpertAgent');
     const prompt = `## Context
 You are a digital marketing specialist for Saudi F&B businesses.
@@ -353,7 +476,7 @@ For each, write a one-sentence Arabic insight explaining why it matters for this
         fallbackValue: { id: 'digital', title: 'تحليل التواجد الرقمي', conclusion: { text: 'تحليل الحضور الرقمي قيد الانتظار', severity: 'warning' as const }, charts: [], narrative: 'بيانات وسائل التواصل الاجتماعي غير متوفرة حالياً.' }
       }
     });
-    await writer?.write({ type: 'data-step-progress', data: { step: 'digital', status: 'complete', message: 'تم تحليل الحضور الرقمي' } });
+    await writer?.write({ type: 'data-step-progress', data: { step: 'digital', phase: 7, status: 'complete', message: 'تم تحليل الحضور الرقمي', preview: { completed: ['digital'] } } });
     return response.object;
   },
 });
@@ -364,7 +487,7 @@ const generateMarketSection = createStep({
   inputSchema: expertInputSchema,
   outputSchema: reportSectionSchema,
   execute: async ({ inputData, mastra, writer }) => {
-    await writer?.write({ type: 'data-step-progress', data: { step: 'market', status: 'running', message: 'جاري تحليل السوق...' } });
+    await writer?.write({ type: 'data-step-progress', data: { step: 'market', phase: 7, status: 'running', message: 'جاري تحليل السوق...' } });
     const agent = mastra?.getAgent('marketExpertAgent');
     const prompt = `## Context
 You are a market research specialist for Saudi F&B businesses.
@@ -410,7 +533,7 @@ Base the strengths/weaknesses on their review content above.`;
         fallbackValue: { id: 'market', title: 'السوق والمنافسين القريبين', conclusion: { text: 'تحليل السوق قيد الانتظار', severity: 'warning' as const }, charts: [], narrative: 'بيانات المنافسين غير متوفرة حالياً.' }
       }
     });
-    await writer?.write({ type: 'data-step-progress', data: { step: 'market', status: 'complete', message: 'تم تحليل السوق' } });
+    await writer?.write({ type: 'data-step-progress', data: { step: 'market', phase: 7, status: 'complete', message: 'تم تحليل السوق', preview: { completed: ['market'] } } });
     return response.object;
   },
 });
@@ -430,7 +553,7 @@ const generateActionPlanSection = createStep({
   execute: async ({ inputData, mastra, writer }) => {
     await writer?.write({ 
       type: 'data-step-progress', 
-      data: { step: 'action-plan', status: 'running', message: 'جاري بناء خطة العمل...' } 
+      data: { step: 'action-plan', phase: 8, status: 'running', message: 'جاري تجميع خطة العمل...' } 
     });
     
     const agent = mastra?.getAgent('cboAgent');
@@ -520,7 +643,7 @@ ${toYaml({ conclusion: inputData.market.conclusion, tacticalMoves: inputData.mar
     
     await writer?.write({ 
       type: 'data-step-progress', 
-      data: { step: 'action-plan', status: 'complete', message: 'تم بناء خطة العمل' } 
+      data: { step: 'action-plan', phase: 8, status: 'complete', message: 'تم تجميع التقرير النهائي' } 
     });
 
     // Update CBO agent working memory with a compact report summary.
