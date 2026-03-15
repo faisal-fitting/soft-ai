@@ -102,7 +102,7 @@ export function ChatSidebar({ businessName, hasReport }: Props) {
       dir="rtl"
       collapsible="none"
       style={{ "--sidebar-width": "20rem" } as React.CSSProperties}
-      className="bg-transparent border-s-0"
+      className="bg-transparent border-s-0 border-r"
     >
       <SidebarHeader className="px-4 py-3">
         <p className="text-sm font-semibold">المحادثة</p>

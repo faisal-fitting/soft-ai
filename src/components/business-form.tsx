@@ -1,874 +1,466 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
-import { motion } from "motion/react";
-import {
-  PlusIcon,
-  Trash2Icon,
-  Loader2,
-  ArrowLeft,
-  ChevronDown,
-  Upload,
-  Layers2,
-  Combine,
-  Copy,
-} from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { motion, AnimatePresence } from "motion/react";
+import { PlusIcon, Trash2Icon, Loader2, ArrowLeft, ArrowRight, ChevronDown, Upload, Layers2, Combine, Copy, CheckCircle2 } from "lucide-react";
 import { z } from "zod";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
-import {
-  Combobox,
-  ComboboxContent,
-  ComboboxEmpty,
-  ComboboxInput,
-  ComboboxItem,
-  ComboboxList,
-} from "@/components/ui/combobox";
+import { Field, FieldGroup, FieldLabel, FieldDescription } from "@/components/ui/field";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Combobox, ComboboxContent, ComboboxEmpty, ComboboxInput, ComboboxItem, ComboboxList } from "@/components/ui/combobox";
 import { financialInputSchema, itemInputSchema } from "@/mastra/shared/financials";
+import { useReportStore } from "@/store/report-store";
 
-// ── Types — derived from Zod schemas (single source of truth) ────────────────
-
+// ── Types ─────────────────────────────────────────────────────────────
 export type MenuItemInput = z.infer<typeof itemInputSchema>;
 export type FinancialFormData = z.infer<typeof financialInputSchema>;
 
-// ── Draft persistence ─────────────────────────────────────────────────────────
-
+// ── Persistence ───────────────────────────────────────────────────────
 const DRAFT_KEY = "cbo-form-draft";
-
-function saveDraft(data: FinancialFormData) {
-  try { localStorage.setItem(DRAFT_KEY, JSON.stringify(data)); } catch { /* silent */ }
-}
-
-function loadDraft(): FinancialFormData | null {
-  try {
-    const raw = localStorage.getItem(DRAFT_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    // Validate shape loosely — if it has businessName it's a valid draft
-    if (typeof parsed?.businessName === "string") return parsed as FinancialFormData;
-    return null;
-  } catch { return null; }
-}
-
-function clearDraft() {
-  try { localStorage.removeItem(DRAFT_KEY); } catch { /* silent */ }
-}
-
-// ── Prompt Builder ───────────────────────────────────────────────────────────
-
-export function buildReportPrompt(data: FinancialFormData): string {
-  return `[GENERATE_REPORT_REQUEST]
-أنشئ تقرير تحليل الأعمال الشامل باستخدام أداة businessAnalysisWorkflow مع هذه البيانات بالضبط:
-
-\`\`\`json
-${JSON.stringify(data, null, 2)}
-\`\`\`
-
-استخدم أداة businessAnalysisWorkflow الآن وأنشئ التقرير الشامل.`;
-}
-
-// ── Field helpers ─────────────────────────────────────────────────────────────
-
-function Field({
-  label,
-  sublabel,
-  error,
-  children,
-}: {
-  label: string;
-  sublabel?: string;
-  error?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="space-y-1.5">
-      <label className="text-sm font-medium leading-none">{label}</label>
-      {sublabel && (
-        <p className="text-muted-foreground">{sublabel}</p>
-      )}
-      {children}
-      {error && <p className="text-destructive">{error}</p>}
-    </div>
-  );
-}
-
-function NumericInput({
-  value,
-  onChange,
-  placeholder = "0",
-  error,
-}: {
-  value?: number;
-  onChange: (v: number) => void;
-  placeholder?: string;
-  error?: boolean;
-}) {
-  return (
-    <Input
-      type="number"
-      min={0}
-      step="any"
-      value={value === undefined || value === 0 ? "" : value}
-      placeholder={placeholder}
-      onChange={(e) => onChange(parseFloat(e.target.value) || 0)}
-      className={cn("tabular-nums", error && "border-destructive focus-visible:ring-destructive")}
-    />
-  );
-}
-
-// ── Places Autocomplete ───────────────────────────────────────────────────────
-
-type PlaceSuggestion = {
-  placePrediction: {
-    placeId: string;
-    structuredFormat: {
-      mainText: { text: string };
-      secondaryText?: { text: string };
-    };
-  };
-};
-
-function PlaceAutocomplete({
-  placeId,
-  onSelect,
-}: {
-  placeId: string;
-  onSelect: (placeId: string, displayName: string) => void;
-}) {
-  const [query, setQuery] = useState("");
-  const [suggestions, setSuggestions] = useState<PlaceSuggestion[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [resetKey, setResetKey] = useState(0);
-  const skipNextQuery = useRef(false);
-
-  useEffect(() => {
-    if (!query.trim()) { setSuggestions([]); return; }
-    const t = setTimeout(async () => {
-      setLoading(true);
-      try {
-        const res = await fetch("/api/places/autocomplete", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ input: query }),
-        });
-        setSuggestions((await res.json()).suggestions ?? []);
-      } catch { /* silent */ }
-      finally { setLoading(false); }
-    }, 350);
-    return () => clearTimeout(t);
-  }, [query]);
-
-  useEffect(() => {
-    if (!placeId) {
-      setResetKey((k) => k + 1);
-      setQuery("");
-      setSuggestions([]);
-    }
-  }, [placeId]);
-
-  const handleInputValueChange = (v: string) => {
-    if (skipNextQuery.current) { skipNextQuery.current = false; return; }
-    setQuery(v);
-  };
-
-  const handleValueChange = (s: PlaceSuggestion | null) => {
-    if (s) {
-      skipNextQuery.current = true;
-      setSuggestions([]);
-      onSelect(s.placePrediction.placeId, s.placePrediction.structuredFormat.mainText.text);
-    } else {
-      setQuery("");
-      setSuggestions([]);
-      onSelect("", "");
-    }
-  };
-
-  return (
-    <div>
-      <Combobox
-        key={resetKey}
-        items={suggestions}
-        onInputValueChange={handleInputValueChange}
-        onValueChange={handleValueChange}
-        itemToStringLabel={(s: PlaceSuggestion) => s.placePrediction.structuredFormat.mainText.text}
-        isItemEqualToValue={(a: PlaceSuggestion, b: PlaceSuggestion) =>
-          a.placePrediction.placeId === b.placePrediction.placeId
-        }
-        filter={null}
-      >
-        <ComboboxInput placeholder="ابحث باسم كافيهك أو مطعمك..." showClear />
-        <ComboboxContent dir="rtl">
-          <ComboboxEmpty>
-            {loading ? <Loader2 className="size-4 animate-spin" /> : query ? "لا توجد نتائج" : "اكتب اسم كافيهك للبحث"}
-          </ComboboxEmpty>
-          <ComboboxList>
-            {(s: PlaceSuggestion) => (
-              <ComboboxItem key={s.placePrediction.placeId} value={s}>
-                {s.placePrediction.structuredFormat.mainText.text}
-                {s.placePrediction.structuredFormat.secondaryText && (
-                  <span className="text-muted-foreground">
-                    {" · "}{s.placePrediction.structuredFormat.secondaryText.text}
-                  </span>
-                )}
-              </ComboboxItem>
-            )}
-          </ComboboxList>
-        </ComboboxContent>
-      </Combobox>
-      {placeId && (
-        <p className="mt-1 truncate font-mono text-muted-foreground" dir="ltr">{placeId}</p>
-      )}
-    </div>
-  );
-}
-
-// ── Default state ─────────────────────────────────────────────────────────────
+const saveDraft = (data: FinancialFormData) => { try { localStorage.setItem(DRAFT_KEY, JSON.stringify(data)); } catch { } };
+const loadDraft = (): FinancialFormData | null => { try { const raw = localStorage.getItem(DRAFT_KEY); return raw ? JSON.parse(raw) : null; } catch { return null; } };
+const clearDraft = () => { try { localStorage.removeItem(DRAFT_KEY); } catch { } };
 
 const DEFAULT_DATA: FinancialFormData = {
-  businessName: "",
-  businessType: "cafe",
-  placeId: "",
-  instagramUser: undefined,
-  tiktokUser: undefined,
-  sales: 0,
-  returns: 0,
-  advertising: 0,
-  discounts: 0,
-  productionStaffCosts: 0,
-  adminSalaries: 0,
-  adminExpenses: 0,
-  rent: 0,
-  utilities: 0,
-  subscriptions: 0,
-  govFees: 0,
-  serviceLaborCosts: 0,
-  otherCosts: 0,
+  businessName: "", businessType: "cafe", placeId: "", googlePlaceName: undefined,
+  instagramUser: undefined, tiktokUser: undefined,
+  sales: 0, returns: 0, advertising: 0, discounts: 0,
+  productionStaffCosts: 0, adminSalaries: 0, adminExpenses: 0, rent: 0,
+  utilities: 0, subscriptions: 0, govFees: 0, serviceLaborCosts: 0, otherCosts: 0,
   items: [],
 };
 
 const newItem = (): MenuItemInput => ({
-  name: "",
-  sellingPrice: 0,
-  soldUnits: 0,
-  rawMaterialCostPerUnit: undefined,
-  packagingCostPerUnit: undefined,
-  totalCostPerUnit: undefined,
-  dailyProductionCapacity: undefined,
+  name: "", sellingPrice: 0, soldUnits: 0,
+  rawMaterialCostPerUnit: undefined, packagingCostPerUnit: undefined,
+  totalCostPerUnit: undefined, dailyProductionCapacity: undefined,
 });
 
-// ── Main Component ────────────────────────────────────────────────────────────
+// ── Place Autocomplete ────────────────────────────────────────────────
+type PlaceSuggestion = { placePrediction: { placeId: string; structuredFormat: { mainText: { text: string }; secondaryText?: { text: string } } } };
 
-interface Props {
-  onSubmit: (data: FinancialFormData) => void;
-  isSubmitting?: boolean;
+function PlaceAutocomplete({ placeId, googlePlaceName, onSelect }: { placeId: string; googlePlaceName?: string; onSelect: (placeId: string, displayName: string) => void }) {
+  const [query, setQuery] = useState("");
+  const [suggestions, setSuggestions] = useState<PlaceSuggestion[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [selectedItem, setSelectedItem] = useState<PlaceSuggestion | null>(() => {
+    if (placeId && googlePlaceName) {
+      console.log("[PlaceAutocomplete] Init with googlePlaceName:", googlePlaceName);
+      return { placePrediction: { placeId, structuredFormat: { mainText: { text: googlePlaceName } } } };
+    }
+    return null;
+  });
+  const skipNextQuery = useRef(false);
+
+  useEffect(() => {
+    console.log("[PlaceAutocomplete] useEffect [placeId]: placeId=", placeId);
+    if (!placeId) { setQuery(""); setSelectedItem(null); }
+  }, [placeId]);
+
+  useEffect(() => {
+    if (!query.trim()) { setSuggestions([]); return; }
+    if (selectedItem && query === selectedItem.placePrediction.structuredFormat.mainText.text) { return; }
+    
+    const t = setTimeout(async () => {
+      console.log("[PlaceAutocomplete] Fetching suggestions for:", query);
+      setLoading(true);
+      try {
+        const res = await fetch("/api/places/autocomplete", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ input: query }) });
+        setSuggestions((await res.json()).suggestions ?? []);
+      } catch { }
+      finally { setLoading(false); }
+    }, 350);
+    return () => clearTimeout(t);
+  }, [query, selectedItem]);
+
+  const handleSelect = (s: PlaceSuggestion) => {
+    console.log("[PlaceAutocomplete] handleSelect:", s.placePrediction.structuredFormat.mainText.text, s.placePrediction.placeId);
+    skipNextQuery.current = true;
+    setQuery(s.placePrediction.structuredFormat.mainText.text);
+    setSelectedItem(s);
+    onSelect(s.placePrediction.placeId, s.placePrediction.structuredFormat.mainText.text);
+  };
+
+  const handleClear = () => {
+    console.log("[PlaceAutocomplete] handleClear called");
+    setQuery("");
+    setSelectedItem(null);
+    setSuggestions([]);
+    onSelect("", "");
+  };
+
+  const handleInputChange = (v: string) => {
+    console.log("[PlaceAutocomplete] onInputValueChange:", v);
+    if (skipNextQuery.current) { skipNextQuery.current = false; return; } 
+    setQuery(v);
+  };
+
+  const handleValueChange = (s: PlaceSuggestion | null) => {
+    console.log("[PlaceAutocomplete] onValueChange:", s ? s.placePrediction.placeId : "null");
+    if (s) handleSelect(s); else handleClear();
+  };
+
+  const displayItems = selectedItem 
+    ? [selectedItem, ...suggestions.filter(s => s.placePrediction.placeId !== selectedItem.placePrediction.placeId)]
+    : suggestions;
+
+  const itemToDisplay = selectedItem ?? (placeId ? suggestions.find(s => s.placePrediction.placeId === placeId) : null) ?? null;
+
+  return (
+    <div className="relative">
+      <Combobox
+        items={displayItems}
+        onInputValueChange={handleInputChange}
+        onValueChange={handleValueChange}
+        itemToStringLabel={(s: PlaceSuggestion) => s.placePrediction.structuredFormat.mainText.text}
+        isItemEqualToValue={(a, b) => a.placePrediction.placeId === b.placePrediction.placeId}
+        filter={null}
+        value={itemToDisplay}
+      >
+        <ComboboxInput 
+          placeholder="ابحث باسم كافيهك أو مطعمك..." 
+          showClear 
+          className="text-foreground placeholder:text-muted-foreground"
+        />
+        <ComboboxContent dir="rtl" className="bg-card text-foreground border-border">
+          <ComboboxEmpty>{loading ? <Loader2 className="size-4 animate-spin" /> : query ? "لا توجد نتائج" : "اكتب اسم كافيهك للبحث"}</ComboboxEmpty>
+          <ComboboxList>{(s: PlaceSuggestion) => (
+            <ComboboxItem key={s.placePrediction.placeId} value={s} className="focus:bg-primary/20">
+              {s.placePrediction.structuredFormat.mainText.text}
+              {s.placePrediction.structuredFormat.secondaryText && <span className="text-muted-foreground"> · {s.placePrediction.structuredFormat.secondaryText.text}</span>}
+            </ComboboxItem>
+          )}</ComboboxList>
+        </ComboboxContent>
+      </Combobox>
+      {placeId && <p className="mt-1 truncate font-mono text-muted-foreground text-sm" dir="ltr">{placeId}</p>}
+    </div>
+  );
 }
 
-export function BusinessForm({ onSubmit, isSubmitting }: Props) {
-  const [tab, setTab] = useState("info");
-
-  // ── State — restore from draft on mount ──────────────────────────────────
+// ── Main Form ─────────────────────────────────────────────────────────
+export function BusinessForm({ onSubmit, isSubmitting }: { onSubmit: (data: FinancialFormData) => void; isSubmitting?: boolean; }) {
+  const store = useReportStore();
+  const step = store.formStep;
+  const setStep = store.setFormStep;
+  
   const [data, setData] = useState<FinancialFormData>(() => loadDraft() ?? DEFAULT_DATA);
   const [collapsed, setCollapsed] = useState<boolean[]>([]);
   const [costModes, setCostModes] = useState<Array<"detailed" | "total">>([]);
-
-  // Sync collapsed/costModes length with items on mount (when restoring a draft)
-  useEffect(() => {
-    setCollapsed((c) => {
-      if (c.length === data.items.length) return c;
-      return data.items.map((_, i) => c[i] ?? true); // restored items collapsed
-    });
-    setCostModes((m) => {
-      if (m.length === data.items.length) return m;
-      return data.items.map((item, i) => {
-        if (m[i]) return m[i];
-        return item.totalCostPerUnit !== undefined ? "total" : "detailed";
-      });
-    });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // run once on mount only
-
-  // ── Draft auto-save (debounced 500ms) ────────────────────────────────────
-  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => {
-    if (saveTimer.current) clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(() => saveDraft(data), 500);
-    return () => { if (saveTimer.current) clearTimeout(saveTimer.current); };
-  }, [data]);
-
-  // ── Helpers ───────────────────────────────────────────────────────────────
-  const set = useCallback(<K extends keyof FinancialFormData>(key: K, value: FinancialFormData[K]) => {
-    setData((d) => ({ ...d, [key]: value }));
-  }, []);
-
-  const setItem = useCallback((index: number, key: keyof MenuItemInput, value: string | number | undefined) => {
-    setData((d) => {
-      const items = [...d.items];
-      items[index] = { ...items[index], [key]: value };
-      return { ...d, items };
-    });
-  }, []);
-
-  const addItem = useCallback(() => {
-    setData((d) => ({ ...d, items: [...d.items, newItem()] }));
-    setCollapsed((c) => [...c, false]);
-    setCostModes((m) => [...m, "detailed"]);
-  }, []);
-
-  const duplicateItem = useCallback((i: number) => {
-    setData((d) => {
-      const items = [...d.items];
-      items.splice(i + 1, 0, { ...items[i] });
-      return { ...d, items };
-    });
-    setCollapsed((c) => { const n = [...c]; n.splice(i + 1, 0, false); return n; });
-    setCostModes((m) => { const n = [...m]; n.splice(i + 1, 0, m[i]); return n; });
-  }, []);
-
-  const removeItem = useCallback((i: number) => {
-    setData((d) => ({ ...d, items: d.items.filter((_, idx) => idx !== i) }));
-    setCollapsed((c) => c.filter((_, idx) => idx !== i));
-    setCostModes((m) => m.filter((_, idx) => idx !== i));
-  }, []);
-
-  // ── Excel import ──────────────────────────────────────────────────────────
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  useEffect(() => {
+    setCollapsed(data.items.map(() => true));
+    setCostModes(data.items.map(item => item.totalCostPerUnit !== undefined ? "total" : "detailed"));
+  }, []);
+
+  useEffect(() => {
+    const timer = setTimeout(() => saveDraft(data), 500);
+    return () => clearTimeout(timer);
+  }, [data]);
+
+  // Debug: log canSubmit validation
+  useEffect(() => {
+    const itemsValid = data.items.every((it) => it.name.trim().length > 0);
+    console.log("[Form] Validation:", {
+      businessName: data.businessName,
+      businessNameTrim: data.businessName.trim(),
+      placeId: data.placeId,
+      placeIdTrim: data.placeId.trim(),
+      sales: data.sales,
+      itemsCount: data.items.length,
+      itemsValid,
+      canSubmit: data.businessName.trim() && data.placeId.trim() && data.items.length > 0 && itemsValid
+    });
+  }, [data]);
+
+  const updateField = (key: keyof FinancialFormData, value: any) => setData(d => ({ ...d, [key]: value }));
+  const updateItem = (index: number, key: keyof MenuItemInput, value: any) => setData(d => ({ ...d, items: d.items.map((item, i) => i === index ? { ...item, [key]: value } : item) }));
+
+  const addItem = () => { setData(d => ({ ...d, items: [...d.items, newItem()] })); setCollapsed(c => [...c, false]); setCostModes(m => [...m, "total"]); };
+  const removeItem = (i: number) => { setData(d => ({ ...d, items: d.items.filter((_, idx) => idx !== i) })); setCollapsed(c => c.filter((_, idx) => idx !== i)); setCostModes(m => m.filter((_, idx) => idx !== i)); };
+  const duplicateItem = (i: number) => { setData(d => { const items = [...d.items]; items.splice(i + 1, 0, { ...items[i] }); return { ...d, items }; }); setCollapsed(c => { const n = [...c]; n.splice(i + 1, 0, c[i]); return n; }); setCostModes(m => { const n = [...m]; n.splice(i + 1, 0, m[i]); return n; }); };
+
   const handleExcelImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const file = e.target.files?.[0]; if (!file) return;
     const buffer = await file.arrayBuffer();
     const { read, utils } = await import("xlsx");
     const wb = read(buffer, { type: "array" });
     const ws = wb.Sheets[wb.SheetNames[0]];
     const rows = utils.sheet_to_json<Record<string, unknown>>(ws);
-
-    const COLUMNS: Record<string, keyof MenuItemInput> = {
-      "اسم المنتج":           "name",
-      "سعر البيع":            "sellingPrice",
-      "وحدات مباعة شهرياً":  "soldUnits",
-      "تكلفة مواد خام":       "rawMaterialCostPerUnit",
-      "تكلفة تغليف":          "packagingCostPerUnit",
-      "طاقة إنتاجية يومية":  "dailyProductionCapacity",
-    };
-
+    const COLUMNS: Record<string, keyof MenuItemInput> = { "اسم المنتج": "name", "سعر البيع": "sellingPrice", "وحدات مباعة شهرياً": "soldUnits", "تكلفة مواد خام": "rawMaterialCostPerUnit", "تكلفة تغليف": "packagingCostPerUnit", "طاقة إنتاجية يومية": "dailyProductionCapacity" };
     const imported: MenuItemInput[] = rows.map((row) => {
       const item = newItem();
       for (const [col, field] of Object.entries(COLUMNS)) {
-        if (row[col] !== undefined) {
-          (item as unknown as Record<string, unknown>)[field] =
-            field === "name" ? String(row[col]) : Number(row[col]) || 0;
-        }
+        if (row[col] !== undefined) (item as any)[field] = field === "name" ? String(row[col]) : Number(row[col]) || 0;
       }
-      if (row["إجمالي التكلفة"] !== undefined) {
-        const totalCost = Number(row["إجمالي التكلفة"]) || 0;
-        const units = Number(row["وحدات مباعة شهرياً"]) || 1;
-        item.totalCostPerUnit = totalCost / units;
-      }
+      if (row["إجمالي التكلفة"] !== undefined) { item.totalCostPerUnit = (Number(row["إجمالي التكلفة"]) || 0) / (Number(row["وحدات مباعة شهرياً"]) || 1); }
       return item;
     }).filter((it) => it.name.trim());
-
-    const importedModes = rows
-      .filter((row) => String(row["اسم المنتج"] ?? "").trim().length > 0)
-      .map((row) => (row["إجمالي التكلفة"] !== undefined ? "total" : "detailed") as "total" | "detailed");
-
     if (!imported.length) return;
-    setData((d) => ({ ...d, items: [...d.items, ...imported] }));
-    setCollapsed((c) => [...c, ...Array(imported.length).fill(true)]);
-    setCostModes((m) => [...m, ...importedModes]);
+    setData(d => ({ ...d, items: [...d.items, ...imported] }));
+    setCollapsed(c => [...c, ...Array(imported.length).fill(true)]);
+    setCostModes(m => [...m, ...Array(imported.length).fill("total")]);
     e.target.value = "";
   };
 
-  // ── Validation ────────────────────────────────────────────────────────────
-
-  // Item-level warnings (non-blocking)
-  const costWarnings = data.items.flatMap((item, i) => {
-    if (!item.name.trim()) return [];
-    const cost = item.totalCostPerUnit ?? item.rawMaterialCostPerUnit ?? 0;
-    const warnings: string[] = [];
-    if (item.sellingPrice > 0 && cost > item.sellingPrice * 0.8)
-      warnings.push(`المنتج "${item.name}": التكلفة مرتفعة جداً (${cost.toFixed(2)} ر.س مقابل سعر ${item.sellingPrice.toFixed(2)} ر.س)`);
-    if (item.sellingPrice === 0 && cost > 0)
-      warnings.push(`المنتج "${item.name}": السعر يجب أن يكون أكبر من صفر`);
-    return warnings;
-  });
-
-  // Section-level soft warnings (non-blocking)
-  const allCostsZero =
-    data.rent === 0 && data.adminSalaries === 0 && data.utilities === 0 &&
-    data.productionStaffCosts === 0 && data.adminExpenses === 0 &&
-    data.subscriptions === 0 && data.govFees === 0 &&
-    data.serviceLaborCosts === 0 && data.otherCosts === 0;
-
-  const noSocialAccounts = !data.instagramUser?.trim() && !data.tiktokUser?.trim();
-
-  // Hard gate — blocks submit
-  const canSubmit = Boolean(
-    data.businessName.trim() &&
-    data.placeId.trim() &&
-    data.sales > 0 &&
-    data.items.length > 0 &&
-    data.items.every((it) => it.name.trim() && it.sellingPrice > 0 && it.soldUnits > 0)
-  );
-
-  const handleSubmit = () => {
-    if (!canSubmit || isSubmitting) return;
-    clearDraft();
-    onSubmit(data);
-  };
-
-  // ── Count non-zero fields in a group (for badge on collapsed trigger) ────
   const deductionsCount = [data.returns, data.advertising, data.discounts].filter(Boolean).length;
-  const extraCostsCount = [
-    data.adminExpenses, data.subscriptions, data.govFees,
-    data.serviceLaborCosts, data.otherCosts,
-  ].filter(Boolean).length;
-
-  // ── Items summary ─────────────────────────────────────────────────────────
+  const extraCostsCount = [data.adminExpenses, data.subscriptions, data.govFees, data.serviceLaborCosts, data.otherCosts].filter(Boolean).length;
   const totalItemsRevenue = data.items.reduce((s, it) => s + (it.sellingPrice * it.soldUnits), 0);
+  const itemsValid = data.items.every((it) => it.name.trim().length > 0);
+  const canSubmit = data.businessName.trim() && data.placeId.trim() && data.items.length > 0 && itemsValid;
+
+  const steps = [
+    { id: 0, label: "المعلومات الأساسية" },
+    { id: 1, label: "البيانات المالية" },
+    { id: 2, label: "المنتجات" },
+  ];
 
   return (
-    <motion.div
-      className="w-full max-w-2xl"
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, ease: "easeOut" }}
-    >
-      <div className="mb-6">
-        <h2 className="text-xl font-semibold tracking-tight" dir="rtl">بيانات المشروع</h2>
-        <p className="mt-1 text-muted-foreground" dir="rtl">
-          أدخل بيانات مشروعك لإنشاء تقرير تحليل الأعمال الشامل
-        </p>
+    <div className="w-full flex flex-col h-full" dir="rtl">
+      {/* Progress Header */}
+      <div className="px-6 py-4 shrink-0">
+        <h2 className="text-xl font-bold text-foreground mb-4 text-right">بيانات المشروع</h2>
+        <div className="flex items-center gap-2 flex-wrap">
+          {steps.map((s, i) => (
+            <div key={s.id} className="flex items-center">
+              <div className={cn("flex items-center gap-2 px-3 py-1 rounded-full transition-all", step === s.id ? "bg-primary text-primary-foreground" : step > s.id ? "bg-emerald-500/20 text-emerald-400" : "text-muted-foreground")}>
+                {step > s.id ? <CheckCircle2 className="size-4" /> : <span className="text-sm font-medium">{i + 1}</span>}
+                <span className="text-sm font-medium">{s.label}</span>
+              </div>
+              {i < 2 && <div className={cn("w-8 h-0.5 mx-2", step > s.id ? "bg-emerald-500" : "bg-border")} />}
+            </div>
+          ))}
+        </div>
       </div>
 
-      <Tabs value={tab} onValueChange={setTab}>
-        <TabsList className="mb-6 w-full">
-          <TabsTrigger value="info" className="flex-1 text-xs">المعلومات الأساسية</TabsTrigger>
-          <TabsTrigger value="finance" className="flex-1 text-xs">البيانات المالية</TabsTrigger>
-          <TabsTrigger value="items" className="flex-1 text-xs">
-            المنتجات ({data.items.length})
-          </TabsTrigger>
-        </TabsList>
-
-        {/* ── Tab 1: Business Info ───────────────────────────────────── */}
-        <TabsContent value="info" className="space-y-4">
-          <Field label="اسم المشروع" sublabel="الاسم التجاري كما يظهر للعملاء">
-            <Input
-              value={data.businessName}
-              onChange={(e) => set("businessName", e.target.value)}
-              placeholder="مثال: قهوة النخيل"
-            />
-          </Field>
-
-          <Field label="نوع المشروع">
-            <Select
-              value={data.businessType}
-              onValueChange={(v) => set("businessType", v as FinancialFormData["businessType"])}
-            >
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="cafe">كافيه / مقهى</SelectItem>
-                <SelectItem value="restaurant">مطعم</SelectItem>
-                <SelectItem value="cloud_kitchen">مطبخ سحابي</SelectItem>
-                <SelectItem value="fine_dining">مطعم راقي</SelectItem>
-              </SelectContent>
-            </Select>
-          </Field>
-
-          <Field
-            label="البحث عن المشروع على Google"
-            sublabel="اكتب اسم كافيهك واختره من القائمة لربطه بتقييمات Google Maps"
-          >
-            <PlaceAutocomplete
-              placeId={data.placeId}
-              onSelect={(id, name) => {
-                set("placeId", id);
-                if (!data.businessName.trim() && name) set("businessName", name);
-              }}
-            />
-          </Field>
-
-          <Separator />
-
-          <p className="text-muted-foreground font-medium">حسابات التواصل الاجتماعي (اختياري)</p>
-          {noSocialAccounts && (
-            <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-amber-800 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-200">
-              أضف حسابات التواصل الاجتماعي لتحليل رقمي أشمل
-            </p>
-          )}
-
-          <div className="grid grid-cols-2 gap-4">
-            <Field label="Instagram">
-              <Input
-                value={data.instagramUser ?? ""}
-                onChange={(e) => set("instagramUser", e.target.value || undefined)}
-                dir="ltr"
-                placeholder="username"
-              />
-            </Field>
-            <Field label="TikTok">
-              <Input
-                value={data.tiktokUser ?? ""}
-                onChange={(e) => set("tiktokUser", e.target.value || undefined)}
-                dir="ltr"
-                placeholder="username"
-              />
-            </Field>
-          </div>
-
-          <div className="flex justify-end pt-2">
-            <Button size="sm" variant="outline" onClick={() => setTab("finance")}>
-              التالي
-              <ArrowLeft className="size-3.5" />
-            </Button>
-          </div>
-        </TabsContent>
-
-        {/* ── Tab 2: Financials ──────────────────────────────────────── */}
-        <TabsContent value="finance" className="space-y-5">
-
-          {/* Essential revenue + costs — always visible */}
-          <p className="font-medium text-muted-foreground">الإيرادات والتكاليف الأساسية</p>
-          <div className="grid grid-cols-2 gap-4">
-            <Field
-              label="إجمالي المبيعات الشهرية"
-              error={data.sales === 0 ? "مطلوب لإنشاء التقرير" : undefined}
-            >
-              <NumericInput
-                value={data.sales}
-                onChange={(v) => set("sales", v)}
-                error={data.sales === 0}
-              />
-            </Field>
-            <Field label="الإيجار">
-              <NumericInput value={data.rent} onChange={(v) => set("rent", v)} />
-            </Field>
-            <Field label="رواتب الإدارة">
-              <NumericInput value={data.adminSalaries} onChange={(v) => set("adminSalaries", v)} />
-            </Field>
-            <Field label="الكهرباء والماء">
-              <NumericInput value={data.utilities} onChange={(v) => set("utilities", v)} />
-            </Field>
-            <Field label="تكاليف موظفي الإنتاج">
-              <NumericInput value={data.productionStaffCosts} onChange={(v) => set("productionStaffCosts", v)} />
-            </Field>
-          </div>
-
-          <Separator />
-
-          {/* Revenue deductions — collapsible */}
-          <Collapsible defaultOpen={deductionsCount > 0}>
-            <CollapsibleTrigger asChild>
-              <button className="flex w-full items-center justify-between gap-2 text-right">
-                <span className="font-medium text-muted-foreground">خصومات الإيرادات</span>
-                <div className="flex items-center gap-2">
-                  {deductionsCount > 0 && (
-                    <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-                      {deductionsCount} مدخلة
-                    </span>
-                  )}
-                  <ChevronDown className="size-4 text-muted-foreground transition-transform [[data-state=open]_&]:rotate-180" />
-                </div>
-              </button>
-            </CollapsibleTrigger>
-            <CollapsibleContent>
-              <div className="mt-3 grid grid-cols-2 gap-4">
-                <Field label="الرواجع والمرتجعات">
-                  <NumericInput value={data.returns} onChange={(v) => set("returns", v)} />
+      {/* Scrollable Content */}
+      <div className="flex-1 overflow-y-auto px-6">
+        <AnimatePresence mode="wait">
+          {/* STEP 0: Business Info */}
+          {step === 0 && (
+            <motion.div key="step0" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="flex flex-col gap-6">
+              <div className="grid grid-cols-2 gap-4">
+                <Field>
+                  <FieldLabel>اسم المشروع</FieldLabel>
+                  <Input 
+                    value={data.businessName} 
+                    onChange={(e) => updateField("businessName", e.target.value)} 
+                    placeholder="أدخل اسم كافيهك أو مطعمك" 
+                    className="text-foreground placeholder:text-muted-foreground" 
+                  />
                 </Field>
-                <Field label="الإعلانات والتسويق">
-                  <NumericInput value={data.advertising} onChange={(v) => set("advertising", v)} />
-                </Field>
-                <Field label="الخصومات والكوبونات">
-                  <NumericInput value={data.discounts} onChange={(v) => set("discounts", v)} />
+                <Field>
+                  <FieldLabel>نوع المشروع</FieldLabel>
+                  <Select value={data.businessType} onValueChange={(v) => updateField("businessType", v)}>
+                    <SelectTrigger className="text-foreground"><SelectValue /></SelectTrigger>
+                    <SelectContent className="bg-card text-foreground border-border" position="popper"><SelectItem value="cafe">كافيه / مقهى</SelectItem><SelectItem value="restaurant">مطعم</SelectItem><SelectItem value="cloud_kitchen">مطبخ سحابي</SelectItem><SelectItem value="fine_dining">مطعم راقي</SelectItem></SelectContent>
+                  </Select>
                 </Field>
               </div>
-            </CollapsibleContent>
-          </Collapsible>
-
-          <Separator />
-
-          {/* Additional fixed costs — collapsible */}
-          <Collapsible defaultOpen={extraCostsCount > 0}>
-            <CollapsibleTrigger asChild>
-              <button className="flex w-full items-center justify-between gap-2 text-right">
-                <span className="font-medium text-muted-foreground">تكاليف إضافية</span>
-                <div className="flex items-center gap-2">
-                  {extraCostsCount > 0 && (
-                    <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-                      {extraCostsCount} مدخلة
-                    </span>
-                  )}
-                  <ChevronDown className="size-4 text-muted-foreground transition-transform [[data-state=open]_&]:rotate-180" />
-                </div>
-              </button>
-            </CollapsibleTrigger>
-            <CollapsibleContent>
-              <div className="mt-3 grid grid-cols-2 gap-4">
-                <Field label="المنصرفات الإدارية">
-                  <NumericInput value={data.adminExpenses} onChange={(v) => set("adminExpenses", v)} />
+              <Field>
+                <FieldLabel>البحث عن المشروع على Google</FieldLabel>
+                <PlaceAutocomplete placeId={data.placeId} googlePlaceName={data.googlePlaceName} onSelect={(id, name) => { console.log("[Form] onSelect:", id, name); updateField("placeId", id); updateField("googlePlaceName", name || undefined); if (!data.businessName.trim() && name) updateField("businessName", name); }} />
+              </Field>
+              <Separator className="bg-border/50" />
+              <div className="grid grid-cols-2 gap-4">
+                <Field>
+                  <FieldLabel>Instagram <span className="text-destructive">*</span></FieldLabel>
+                  <Input value={data.instagramUser ?? ""} onChange={(e) => updateField("instagramUser", e.target.value || undefined)} placeholder="@username" dir="ltr" className="text-foreground placeholder:text-muted-foreground" />
                 </Field>
-                <Field label="الإنترنت والاشتراكات">
-                  <NumericInput value={data.subscriptions} onChange={(v) => set("subscriptions", v)} />
-                </Field>
-                <Field label="الرسوم الحكومية">
-                  <NumericInput value={data.govFees} onChange={(v) => set("govFees", v)} />
-                </Field>
-                <Field label="عمال النظافة والتقديم">
-                  <NumericInput value={data.serviceLaborCosts} onChange={(v) => set("serviceLaborCosts", v)} />
-                </Field>
-                <Field label="تكاليف أخرى">
-                  <NumericInput value={data.otherCosts} onChange={(v) => set("otherCosts", v)} />
+                <Field>
+                  <FieldLabel>TikTok <span className="text-destructive">*</span></FieldLabel>
+                  <Input value={data.tiktokUser ?? ""} onChange={(e) => updateField("tiktokUser", e.target.value || undefined)} placeholder="@username" dir="ltr" className="text-foreground placeholder:text-muted-foreground" />
                 </Field>
               </div>
-            </CollapsibleContent>
-          </Collapsible>
-
-          {/* All costs zero warning */}
-          {allCostsZero && data.sales > 0 && (
-            <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-amber-800 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-200">
-              ادخل التكاليف للحصول على تحليل مالي دقيق
-            </p>
+            </motion.div>
           )}
 
-          <div className="flex justify-end pt-2">
-            <Button size="sm" variant="outline" onClick={() => setTab("items")}>
-              التالي: المنتجات
-              <ArrowLeft className="ml-1.5 size-3.5" />
-            </Button>
-          </div>
-        </TabsContent>
-
-        {/* ── Tab 3: Menu Items ──────────────────────────────────────── */}
-        <TabsContent value="items" className="space-y-4">
-
-          {/* Summary row */}
-          {data.items.length > 0 && (
-            <div className="flex items-center justify-between rounded-lg border bg-muted/30 px-4 py-2" dir="rtl">
-              <span className="text-muted-foreground">{data.items.length} منتجات</span>
-              <span className="font-semibold tabular-nums">
-                {totalItemsRevenue.toLocaleString("ar-SA")} ر.س / شهر
-              </span>
-            </div>
-          )}
-
-          {/* Add + Import toolbar — at the top */}
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              className="flex-1 gap-1.5 border-dashed text-xs"
-              onClick={addItem}
-            >
-              <PlusIcon className="size-3.5" />
-              إضافة منتج
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-1.5 text-xs"
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <Upload className="size-3.5" />
-              استيراد من Excel
-            </Button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".xlsx,.xls,.csv"
-              className="hidden"
-              onChange={handleExcelImport}
-            />
-          </div>
-
-          {/* Items list */}
-          {data.items.map((item, i) => (
-            <motion.div
-              key={i}
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "auto" }}
-              exit={{ opacity: 0, height: 0 }}
-              transition={{ duration: 0.2 }}
-              className="rounded-lg border bg-card p-4"
-            >
-              <Collapsible
-                open={!collapsed[i]}
-                onOpenChange={(open) =>
-                  setCollapsed((c) => { const n = [...c]; n[i] = !open; return n; })
-                }
-              >
-                {/* Card header — always visible */}
-                <div className="flex items-center justify-between">
-                  <CollapsibleTrigger asChild>
-                    <button className="flex flex-1 items-center gap-2 text-right">
-                      <ChevronDown
-                        className={cn(
-                          "size-3.5 transition-transform text-muted-foreground",
-                          collapsed[i] && "-rotate-90"
-                        )}
-                      />
-                      <span className="text-sm font-medium">
-                        {item.name.trim() || `منتج ${i + 1}`}
-                      </span>
-                      {item.sellingPrice > 0 && item.soldUnits > 0 && (
-                        <span className="text-muted-foreground tabular-nums">
-                          · {(item.sellingPrice * item.soldUnits).toLocaleString("ar-SA")} ر.س
-                        </span>
-                      )}
-                    </button>
-                  </CollapsibleTrigger>
-
-                  <div className="flex items-center gap-1">
-                    {/* Cost mode toggle */}
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      className="size-6"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setCostModes((m) => {
-                          const n = [...m];
-                          n[i] = m[i] === "detailed" ? "total" : "detailed";
-                          return n;
-                        });
-                      }}
-                      title={costModes[i] === "detailed" ? "التبديل لإجمالي التكلفة" : "التبديل لتفاصيل التكلفة"}
-                    >
-                      {costModes[i] === "detailed" ? <Layers2 className="size-3" /> : <Combine className="size-3" />}
-                    </Button>
-
-                    {/* Duplicate button */}
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      className="size-6"
-                      onClick={(e) => { e.stopPropagation(); duplicateItem(i); }}
-                      title="تكرار المنتج"
-                    >
-                      <Copy className="size-3" />
-                    </Button>
-
-                    {/* Delete button */}
-                    {data.items.length > 1 && (
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        className="size-7 text-destructive hover:text-destructive"
-                        onClick={() => removeItem(i)}
-                      >
-                        <Trash2Icon className="size-3.5" />
-                      </Button>
-                    )}
-                  </div>
-                </div>
-
-                {/* Collapsible fields */}
-                <CollapsibleContent>
-                  <div className="mt-3 grid grid-cols-2 gap-3">
-                    <div className="col-span-2">
-                      <Field label="اسم المنتج">
-                        <Input
-                          value={item.name}
-                          onChange={(e) => setItem(i, "name", e.target.value)}
-                          placeholder="مثال: كابتشينو"
-                        />
-                      </Field>
-                    </div>
-                    <Field
-                      label="سعر البيع (SAR)"
-                      error={item.name.trim() && item.sellingPrice === 0 ? "مطلوب" : undefined}
-                    >
-                      <NumericInput
-                        value={item.sellingPrice}
-                        onChange={(v) => setItem(i, "sellingPrice", v)}
-                        error={Boolean(item.name.trim() && item.sellingPrice === 0)}
-                      />
-                    </Field>
-                    <Field
-                      label="الوحدات المباعة شهرياً"
-                      error={item.name.trim() && item.soldUnits === 0 ? "مطلوب" : undefined}
-                    >
-                      <NumericInput
-                        value={item.soldUnits}
-                        onChange={(v) => setItem(i, "soldUnits", v)}
-                        error={Boolean(item.name.trim() && item.soldUnits === 0)}
-                      />
-                    </Field>
-
-                    {costModes[i] === "total" ? (
-                      <Field label="إجمالي تكلفة الوحدة شهرياً (SAR)">
-                        <NumericInput
-                          value={item.totalCostPerUnit}
-                          onChange={(v) => setItem(i, "totalCostPerUnit", v)}
-                        />
-                      </Field>
-                    ) : (
-                      <>
-                        <Field label="تكلفة المواد الخام/وحدة">
-                          <NumericInput
-                            value={item.rawMaterialCostPerUnit}
-                            onChange={(v) => setItem(i, "rawMaterialCostPerUnit", v)}
-                          />
-                        </Field>
-                        <Field label="تكلفة التغليف/وحدة">
-                          <NumericInput
-                            value={item.packagingCostPerUnit}
-                            onChange={(v) => setItem(i, "packagingCostPerUnit", v)}
-                          />
-                        </Field>
-                      </>
-                    )}
-
-                    <div className={cn("col-span-2", costModes[i] === "total" && "col-span-1")}>
-                      <Field label="الطاقة الإنتاجية اليومية (وحدة/يوم)">
-                        <NumericInput
-                          value={item.dailyProductionCapacity ?? 0}
-                          onChange={(v) => setItem(i, "dailyProductionCapacity", v || undefined)}
-                        />
-                      </Field>
-                    </div>
-                  </div>
+          {/* STEP 1: Financials */}
+          {step === 1 && (
+            <motion.div key="step1" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="flex flex-col gap-6">
+              <div className="grid grid-cols-3 gap-4">
+                <Field>
+                  <FieldLabel className="text-primary">المبيعات الشهرية (الأهم)</FieldLabel>
+                  <Input 
+                    type="number" 
+                    className="no-spinner font-mono text-foreground placeholder:text-muted-foreground" 
+                    value={data.sales || ""} 
+                    onChange={(e) => updateField("sales", parseFloat(e.target.value) || 0)} 
+                    placeholder="0"
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel>الإيجار</FieldLabel>
+                  <Input type="number" className="no-spinner font-mono text-foreground placeholder:text-muted-foreground" value={data.rent || ""} onChange={(e) => updateField("rent", parseFloat(e.target.value) || 0)} />
+                </Field>
+                <Field>
+                  <FieldLabel>رواتب الإدارة</FieldLabel>
+                  <Input type="number" className="no-spinner font-mono text-foreground placeholder:text-muted-foreground" value={data.adminSalaries || ""} onChange={(e) => updateField("adminSalaries", parseFloat(e.target.value) || 0)} />
+                </Field>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <Field>
+                  <FieldLabel>الكهرباء والماء</FieldLabel>
+                  <Input type="number" className="no-spinner font-mono text-foreground placeholder:text-muted-foreground" value={data.utilities || ""} onChange={(e) => updateField("utilities", parseFloat(e.target.value) || 0)} />
+                </Field>
+                <Field>
+                  <FieldLabel>تكاليف الإنتاج</FieldLabel>
+                  <Input type="number" className="no-spinner font-mono text-foreground placeholder:text-muted-foreground" value={data.productionStaffCosts || ""} onChange={(e) => updateField("productionStaffCosts", parseFloat(e.target.value) || 0)} />
+                </Field>
+              </div>
+              <Separator className="bg-border/50" />
+              <Collapsible defaultOpen={true}>
+                <CollapsibleTrigger className="flex w-full items-center justify-between py-2 font-medium"><span>خصومات الإيرادات</span><ChevronDown className="size-4" /></CollapsibleTrigger>
+                <CollapsibleContent className="grid grid-cols-2 gap-4 mt-4">
+                  <Field>
+                    <FieldLabel>الرواجع</FieldLabel>
+                    <Input type="number" className="no-spinner font-mono text-foreground placeholder:text-muted-foreground" value={data.returns || ""} onChange={(e) => updateField("returns", parseFloat(e.target.value) || 0)} />
+                  </Field>
+                  <Field>
+                    <FieldLabel>الإعلانات</FieldLabel>
+                    <Input type="number" className="no-spinner font-mono text-foreground placeholder:text-muted-foreground" value={data.advertising || ""} onChange={(e) => updateField("advertising", parseFloat(e.target.value) || 0)} />
+                  </Field>
+                  <Field>
+                    <FieldLabel>الخصومات</FieldLabel>
+                    <Input type="number" className="no-spinner font-mono text-foreground placeholder:text-muted-foreground" value={data.discounts || ""} onChange={(e) => updateField("discounts", parseFloat(e.target.value) || 0)} />
+                  </Field>
+                </CollapsibleContent>
+              </Collapsible>
+              <Collapsible defaultOpen={true}>
+                <CollapsibleTrigger className="flex w-full items-center justify-between py-2 font-medium"><span>تكاليف إضافية</span><ChevronDown className="size-4" /></CollapsibleTrigger>
+                <CollapsibleContent className="grid grid-cols-2 gap-4 mt-4">
+                  <Field>
+                    <FieldLabel>مصروفات إدارية</FieldLabel>
+                    <Input type="number" className="no-spinner font-mono text-foreground placeholder:text-muted-foreground" value={data.adminExpenses || ""} onChange={(e) => updateField("adminExpenses", parseFloat(e.target.value) || 0)} />
+                  </Field>
+                  <Field>
+                    <FieldLabel>اشتراكات</FieldLabel>
+                    <Input type="number" className="no-spinner font-mono text-foreground placeholder:text-muted-foreground" value={data.subscriptions || ""} onChange={(e) => updateField("subscriptions", parseFloat(e.target.value) || 0)} />
+                  </Field>
+                  <Field>
+                    <FieldLabel>رسوم حكومية</FieldLabel>
+                    <Input type="number" className="no-spinner font-mono text-foreground placeholder:text-muted-foreground" value={data.govFees || ""} onChange={(e) => updateField("govFees", parseFloat(e.target.value) || 0)} />
+                  </Field>
+                  <Field>
+                    <FieldLabel>عمال خدمة</FieldLabel>
+                    <Input type="number" className="no-spinner font-mono text-foreground placeholder:text-muted-foreground" value={data.serviceLaborCosts || ""} onChange={(e) => updateField("serviceLaborCosts", parseFloat(e.target.value) || 0)} />
+                  </Field>
+                  <Field>
+                    <FieldLabel>تكاليف أخرى</FieldLabel>
+                    <Input type="number" className="no-spinner font-mono text-foreground placeholder:text-muted-foreground" value={data.otherCosts || ""} onChange={(e) => updateField("otherCosts", parseFloat(e.target.value) || 0)} />
+                  </Field>
                 </CollapsibleContent>
               </Collapsible>
             </motion.div>
-          ))}
+          )}
 
-          {/* Submit */}
-          <div className="pt-2 space-y-3">
-            {costWarnings.length > 0 && (
-              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-amber-800 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-200">
-                <p className="font-semibold">تحذيرات:</p>
-                <ul className="mt-1 list-inside list-disc">
-                  {costWarnings.map((w, i) => <li key={i}>{w}</li>)}
-                </ul>
+          {/* STEP 2: Products */}
+          {step === 2 && (
+            <motion.div key="step2" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="flex flex-col gap-6">
+              {data.items.length > 0 && (
+                <div className="flex items-center justify-between py-3 border-b border-border/50">
+                  <span className="text-foreground/80">{data.items.length} منتجات</span>
+                  <span className="text-foreground font-mono">{totalItemsRevenue.toLocaleString("ar-SA")} ر.س</span>
+                </div>
+              )}
+              {data.items.map((item, i) => (
+                <div key={i} className="pb-6 mb-6 border-b border-border/50 last:border-0">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-3 flex-1">
+                      <Input value={item.name} onChange={(e) => updateItem(i, "name", e.target.value)} placeholder="اسم المنتج" className="max-w-[200px] text-foreground placeholder:text-muted-foreground" />
+                      <Button variant="ghost" size="icon" className="size-8 text-muted-foreground hover:text-foreground hover:bg-muted" onClick={() => duplicateItem(i)}><Copy className="size-4" /></Button>
+                    </div>
+                    <Button variant="ghost" size="icon" className="size-8 text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => removeItem(i)}><Trash2Icon className="size-4" /></Button>
+                  </div>
+                  
+                  {/* Cost Mode Toggle */}
+                  <div className="flex items-center gap-2 mb-4">
+                    <Button
+                      variant={costModes[i] === "detailed" ? "default" : "outline"}
+                      size="sm"
+                      className="h-8"
+                      onClick={() => {
+                        const newModes = [...costModes];
+                        newModes[i] = "detailed";
+                        setCostModes(newModes);
+                      }}
+                    >
+                      مفصل
+                    </Button>
+                    <Button
+                      variant={costModes[i] === "total" ? "default" : "outline"}
+                      size="sm"
+                      className="h-8"
+                      onClick={() => {
+                        const newModes = [...costModes];
+                        newModes[i] = "total";
+                        setCostModes(newModes);
+                      }}
+                    >
+                      إجمالي
+                    </Button>
+                  </div>
+
+                  {/* Cost Fields - Total Mode */}
+                  <div className="grid grid-cols-3 gap-4">
+                    <Field>
+                      <FieldLabel>سعر البيع</FieldLabel>
+                      <Input type="number" className="no-spinner font-mono text-foreground placeholder:text-muted-foreground" placeholder="0" value={item.sellingPrice || ""} onChange={(e) => updateItem(i, "sellingPrice", parseFloat(e.target.value) || 0)} />
+                    </Field>
+                    <Field>
+                      <FieldLabel>الوحدات المباعة</FieldLabel>
+                      <Input type="number" className="no-spinner font-mono text-foreground placeholder:text-muted-foreground" placeholder="0" value={item.soldUnits || ""} onChange={(e) => updateItem(i, "soldUnits", parseFloat(e.target.value) || 0)} />
+                    </Field>
+                    {costModes[i] === "detailed" ? (
+                      <>
+                        <Field>
+                          <FieldLabel>المواد الخام</FieldLabel>
+                          <Input type="number" className="no-spinner font-mono text-foreground placeholder:text-muted-foreground" placeholder="0" value={item.rawMaterialCostPerUnit || ""} onChange={(e) => updateItem(i, "rawMaterialCostPerUnit", parseFloat(e.target.value) || 0)} />
+                        </Field>
+                        <Field>
+                          <FieldLabel>التغليف</FieldLabel>
+                          <Input type="number" className="no-spinner font-mono text-foreground placeholder:text-muted-foreground" placeholder="0" value={item.packagingCostPerUnit || ""} onChange={(e) => updateItem(i, "packagingCostPerUnit", parseFloat(e.target.value) || 0)} />
+                        </Field>
+                        <Field>
+                          <FieldLabel>الطاقة الإنتاجية</FieldLabel>
+                          <Input type="number" className="no-spinner font-mono text-foreground placeholder:text-muted-foreground" placeholder="0" value={item.dailyProductionCapacity || ""} onChange={(e) => updateItem(i, "dailyProductionCapacity", parseFloat(e.target.value) || 0)} />
+                        </Field>
+                      </>
+                    ) : (
+                      <Field>
+                        <FieldLabel>إجمالي التكلفة</FieldLabel>
+                        <Input type="number" className="no-spinner font-mono text-foreground placeholder:text-muted-foreground" placeholder="0" value={item.totalCostPerUnit || ""} onChange={(e) => updateItem(i, "totalCostPerUnit", parseFloat(e.target.value) || 0)} />
+                      </Field>
+                    )}
+                  </div>
+                </div>
+              ))}
+              <div className="flex gap-2 pt-4">
+                <Button variant="outline" className="flex-1 border-dashed border-border" onClick={addItem}><PlusIcon className="size-4 ml-2" />إضافة منتج</Button>
+                <Button variant="outline" className="border-border" onClick={() => fileInputRef.current?.click()}><Upload className="size-4 ml-2" />استيراد</Button>
+                <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleExcelImport} />
               </div>
-            )}
-            <Button
-              className="w-full"
-              onClick={handleSubmit}
-              disabled={!canSubmit || isSubmitting}
-            >
-              {isSubmitting ? (
-                <><Loader2 className="size-4 animate-spin" />جارٍ إنشاء التقرير...</>
-              ) : "إنشاء التقرير الشامل"}
-            </Button>
-          </div>
-        </TabsContent>
-      </Tabs>
-    </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
+      {/* Sticky Footer */}
+      <div className="px-6 py-4 flex justify-between items-center shrink-0">
+        <Button variant="default" disabled={step === 0} onClick={() => setStep(step - 1)}><ArrowRight className="ml-2" />السابق</Button>
+        {step < 2 ? (
+          <Button onClick={() => setStep(step + 1)}>التالي<ArrowLeft className="mr-2" /></Button>
+        ) : (
+          <Button onClick={() => { clearDraft(); onSubmit(data); }} disabled={!canSubmit || isSubmitting}>
+            {isSubmitting ? <Loader2 className="animate-spin ml-2" /> : null}
+            بدء التحليل الذكي
+          </Button>
+        )}
+      </div>
+    </div>
   );
 }

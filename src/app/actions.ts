@@ -18,19 +18,20 @@ export async function getThreadMessages(threadId: string) {
   return converted;
 }
 
-export async function getWorkflowRun(runId: string): Promise<ReportManifest | null> {
+export async function getWorkflowRun(runId: string): Promise<{ manifest: ReportManifest | null; status: string | null }> {
   noStore();
   try {
     const workflow = mastra.getWorkflow('businessAnalysisWorkflow');
     const state = await workflow.getWorkflowRunById(runId);
     console.log(`[getWorkflowRun] runId=${runId} status=${state?.status ?? 'not found'}`);
-    if (!state || state.status !== 'success') return null;
+    if (!state) return { manifest: null, status: null };
+    if (state.status !== 'success') return { manifest: null, status: state.status };
     const result = (state as any).result;
     const manifest = result?.metadata ? result : result?.result;
-    return manifest as ReportManifest ?? null;
+    return { manifest: manifest as ReportManifest ?? null, status: state.status };
   } catch (err) {
     console.error(`[getWorkflowRun] failed for runId=${runId}:`, err);
-    return null;
+    return { manifest: null, status: null };
   }
 }
 

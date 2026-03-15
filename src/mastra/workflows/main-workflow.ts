@@ -344,10 +344,22 @@ const generateStrategicDirective = createStep({
     const agent = mastra?.getAgent('cboAgent');
     if (!agent) throw new Error('cboAgent not found');
 
+    const threadId = inputData.threadId;
+    const memoryThreadId = threadId ?? `workflow-${Date.now()}`;
+
+    // Create thread if it doesn't exist yet (required for observational memory)
+    const mem = await agent.getMemory();
+    if (mem) {
+      try { await mem.createThread({ resourceId: 'user', threadId: memoryThreadId }); } catch { /* ignore if already exists */ }
+    }
+
     await writer?.write({ type: 'data-step-progress', data: { step: 'directive', phase: 6, status: 'running', message: 'جاري بناء التوجه الاستراتيجي...' } });
     const prompt = `Analyze this business and set the strategic directive:\n${JSON.stringify(inputData)}`;
     
     const response = await agent.generate(prompt, {
+      prepareStep: () => ({ model: 'openrouter/google/gemini-3.1-pro-preview' }),
+      // Always pass memory with threadId for ObservationalMemory
+      memory: { thread: memoryThreadId, resource: 'user' },
       structuredOutput: {
         schema: strategicDirectiveSchema,
         errorStrategy: 'fallback',
@@ -548,6 +560,7 @@ const generateActionPlanSection = createStep({
     financials: reportSectionSchema,
     digital: reportSectionSchema,
     market: reportSectionSchema,
+    threadId: z.string().optional(),
   }),
   outputSchema: reportSectionSchema,
   execute: async ({ inputData, mastra, writer }) => {
@@ -559,7 +572,7 @@ const generateActionPlanSection = createStep({
     const agent = mastra?.getAgent('cboAgent');
     if (!agent) throw new Error('cboAgent not found');
 
-    const threadId: string | undefined = (inputData.base as any).threadId;
+    const threadId = inputData.threadId;
     
     const semanticSW = {
       strengths: (inputData.base as any).semanticAnalysis?.strengths ?? [],
@@ -623,7 +636,8 @@ ${toYaml({ conclusion: inputData.market.conclusion, tacticalMoves: inputData.mar
 
     const response = await agent.generate(prompt, {
       prepareStep: () => ({ model: 'openrouter/google/gemini-3.1-pro-preview' }),
-      // No memory option — don't write to thread history, use working memory for context
+      // Always pass memory with threadId for ObservationalMemory
+      memory: { thread: memoryThreadId, resource: 'user' },
       structuredOutput: {
         schema: reportSectionSchema,
         errorStrategy: 'fallback',
@@ -721,6 +735,7 @@ export const businessAnalysisWorkflow = createWorkflow({
         nearbyCompetitors: nearby?.nearbyCompetitors,
         socialData: social?.socialData,
         competitorReviews: competitorReviews?.competitorReviews ?? [],
+        threadId: (inputData as any).threadId,
     };
   }, { id: 'merge-external-data' })
   .parallel([runSemanticAnalysis, runSocialAudit])
@@ -740,6 +755,7 @@ export const businessAnalysisWorkflow = createWorkflow({
       socialAudit: socialResult,
       directive,
       healthScore,
+      threadId: (inputData as any).threadId,
     };
   }, { id: 'prepare-expert-input' })
   .parallel([generateFinancialSection, generateDigitalSection, generateMarketSection])
@@ -751,6 +767,7 @@ export const businessAnalysisWorkflow = createWorkflow({
       financials: parallel['generate-financial-section'],
       digital: parallel['generate-digital-section'],
       market: parallel['generate-market-section'],
+      threadId: (inputData as any).threadId,
     };
   }, { id: 'expert-aggregator' })
   .then(generateActionPlanSection)

@@ -12,10 +12,10 @@ import { useReportStore } from "@/store/report-store";
 import { BusinessSidebar } from "@/components/business-sidebar";
 import { ChatSidebar } from "@/components/chat-sidebar";
 import { ReportView } from "@/components/report-view";
-import { BusinessForm, type FinancialFormData } from "@/components/business-form";
 import { GenerationProgress } from "@/components/generation-progress";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import type { ReportManifest, CollectedData, StepProgress } from "@/lib/types";
+import type { FinancialFormData } from "@/components/business-form";
 
 interface Props {
   sessionKey: number;
@@ -25,7 +25,6 @@ interface Props {
 export function ReportSession({ sessionKey, urlRunId }: Props) {
   const router = useRouter();
   const store = useReportStore();
-  const phase = store.phase;
   const businessName = store.businessName;
 
   const [manifest, setManifest] = useState<ReportManifest | null>(null);
@@ -35,6 +34,8 @@ export function ReportSession({ sessionKey, urlRunId }: Props) {
   const [progressHistory, setProgressHistory] = useState<StepProgress[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(true);
   const [restoreError, setRestoreError] = useState<string | null>(null);
+  const [isObservingRunning, setIsObservingRunning] = useState(false);
+  const hasStartedObserving = useRef(false);
 
   const pendingFormData = useRef<FinancialFormData | null>(null);
   const pendingThreadId = useRef<string | null>(null);
@@ -45,7 +46,10 @@ export function ReportSession({ sessionKey, urlRunId }: Props) {
       new DefaultChatTransport({
         api: "/api/report/stream",
         prepareSendMessagesRequest: () => ({
-          body: { inputData: { ...pendingFormData.current, threadId: pendingThreadId.current } },
+          body: { 
+            inputData: pendingFormData.current,
+            threadId: pendingThreadId.current 
+          },
         }),
       }),
     []
@@ -64,7 +68,7 @@ export function ReportSession({ sessionKey, urlRunId }: Props) {
       if (part.type === "data-workflow") {
         if (part.id && !store.runId) {
           store.startReport(part.id, pendingThreadId.current!, pendingFormData.current?.businessName ?? "");
-          router.replace(`/?run=${part.id}`, { scroll: false } as any);
+          router.replace(`/report/${part.id}`, { scroll: false } as any);
         }
 
         if (part.data?.status === "success") {
@@ -93,6 +97,62 @@ export function ReportSession({ sessionKey, urlRunId }: Props) {
     onError: (err: unknown) => console.error("[workflow:error]", err),
   });
 
+  // ── Observe transport for reconnecting to running workflow ───────────────────────
+  const observeTransport = useMemo(
+    () =>
+      new DefaultChatTransport({
+        api: "/api/report/observe",
+        prepareSendMessagesRequest: () => ({
+          body: { runId: urlRunId },
+        }),
+      }),
+    [urlRunId]
+  );
+
+  const { sendMessage: observeSend, status: observeStatus } = useChat({
+    transport: observeTransport,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    onData: (part: any) => {
+      console.log("[observe:onData]", part.type);
+      if (part.type === "data-step-progress") {
+        setProgressHistory((prev) => [...prev, part.data as StepProgress]);
+      }
+      if (part.type === "data-workflow" && part.data?.status === "success") {
+        // Extract manifest matching getWorkflowRun logic
+        const result = part.data?.result;
+        const manifest = result?.metadata ? result : result?.result;
+        if (manifest?.metadata && manifest?.directive && manifest?.sections) {
+          setManifest(manifest as ReportManifest);
+          setProgressHistory([]);
+          setIsObservingRunning(false);
+          hasStartedObserving.current = false;
+          if (urlRunId) {
+            getCollectedData(urlRunId).then(setCollectedData).catch(console.error);
+          }
+        }
+      }
+    },
+    onFinish: () => {
+      console.log("[observe:onFinish]");
+      setIsObservingRunning(false);
+      hasStartedObserving.current = false;
+    },
+    onError: (err: unknown) => {
+      console.error("[observe:error]", err);
+      setIsObservingRunning(false);
+      hasStartedObserving.current = false;
+    },
+  });
+
+  // Trigger observe when status is 'running'
+  useEffect(() => {
+    if (isObservingRunning && observeStatus === "ready" && urlRunId && !hasStartedObserving.current) {
+      console.log("[observe] triggering for runId:", urlRunId);
+      hasStartedObserving.current = true;
+      observeSend({ text: "observe" });
+    }
+  }, [isObservingRunning, observeStatus, urlRunId, observeSend]);
+
   // ── Restore manifest on mount ────────────────────────────────────────────────
   useEffect(() => {
     if (!urlRunId) {
@@ -105,13 +165,15 @@ export function ReportSession({ sessionKey, urlRunId }: Props) {
       getWorkflowRun(urlRunId),
       getCollectedData(urlRunId),
     ])
-      .then(([restoredManifest, restoredCollected]) => {
+      .then(([{ manifest: restoredManifest, status }, restoredCollected]) => {
         if (restoredManifest) {
           setManifest(restoredManifest);
           setCollectedData(restoredCollected);
-          if (!store.phase || store.phase === "form") {
-            store.startReport(urlRunId, store.threadId ?? "", store.businessName ?? "");
-          }
+          store.startReport(urlRunId, store.threadId ?? "", store.businessName ?? "");
+        } else if (status === "running") {
+          // Workflow is still running - will reconnect via observe stream
+          setIsObservingRunning(true);
+          console.log("[ReportSession] workflow running, will observe");
         } else {
           setRestoreError(urlRunId);
         }
@@ -125,9 +187,12 @@ export function ReportSession({ sessionKey, urlRunId }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const workflowRunning = workflowStatus === "submitted" || workflowStatus === "streaming";
+  const workflowRunning = workflowStatus === "submitted" || workflowStatus === "streaming" || isObservingRunning;
   const hasReport = !!manifest;
-  const showProgress = (workflowRunning || progressHistory.length > 0) && !manifest;
+  const showProgress = workflowRunning || progressHistory.length > 0;
+
+  // Don't show error while workflow is still running - it might complete successfully
+  const showError = restoreError && !workflowRunning;
 
   if (loadingHistory) {
     return (
@@ -137,7 +202,7 @@ export function ReportSession({ sessionKey, urlRunId }: Props) {
     );
   }
 
-  if (restoreError) {
+  if (showError) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-3 px-8 text-center" dir="rtl">
         <div className="flex size-14 items-center justify-center rounded-full border-2 border-red-200 bg-red-50 dark:border-red-800/40 dark:bg-red-950/20">
@@ -166,11 +231,15 @@ export function ReportSession({ sessionKey, urlRunId }: Props) {
     const newThreadId = crypto.randomUUID();
     pendingFormData.current = data;
     pendingThreadId.current = newThreadId;
+    store.setFormStep(0); // Reset form step
     store.startReport("", newThreadId, data.businessName);
     saveThreadTitle(newThreadId, data.businessName).catch(console.error);
-    await workflowSend({ text: "" });
+    
+    // Trigger workflow with empty text, the transport handles the payload
+    await workflowSend({ text: "generate" });
   };
 
+  // Dashboard mode - with sidebars
   return (
     <SidebarProvider
       defaultOpen={hasReport}
@@ -181,18 +250,7 @@ export function ReportSession({ sessionKey, urlRunId }: Props) {
 
       <SidebarInset className="overflow-hidden">
         <AnimatePresence mode="wait">
-          {phase === "form" ? (
-            <motion.div
-              key={`form-${sessionKey}`}
-              className="flex flex-1 items-start justify-center overflow-y-auto px-8 py-12"
-              initial={{ opacity: 0, x: -24 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -24 }}
-              transition={{ duration: 0.3, ease: "easeInOut" }}
-            >
-              <BusinessForm onSubmit={handleFormSubmit} isSubmitting={workflowRunning} />
-            </motion.div>
-          ) : showProgress ? (
+          {showProgress ? (
             <motion.div
               key={`progress-${sessionKey}`}
               className="flex flex-1 overflow-hidden"

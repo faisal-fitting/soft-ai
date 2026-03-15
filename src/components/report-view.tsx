@@ -1,4 +1,5 @@
 "use client";
+import { useState } from "react";
 import { motion } from "motion/react";
 import {
   TrendingUp,
@@ -20,6 +21,8 @@ import {
   MessageSquare,
   Instagram,
   ExternalLink,
+  ChevronLeft,
+  ChevronRight,
   type LucideIcon,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -628,6 +631,21 @@ const MENU_CATEGORY_CFG = {
 };
 
 function FinancialDataSection({ financials }: { financials: CollectedFinancials }) {
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
+  
+  const cogsPct = financials.netRevenue > 0 ? ((financials.rawMaterials + financials.packaging) / financials.netRevenue) * 100 : 0;
+  // Fallback to adminSalaries if direct labor is 0, so labor bar isn't empty when users lump all salaries
+  const laborCost = (financials.productionStaffCosts + financials.serviceLaborCosts) > 0 
+    ? (financials.productionStaffCosts + financials.serviceLaborCosts) 
+    : financials.adminSalaries;
+  const laborPct = financials.netRevenue > 0 ? (laborCost / financials.netRevenue) * 100 : 0;
+  const totalPrimePct = cogsPct + laborPct;
+  
+  const safeCogsPct = Math.min(cogsPct, 100);
+  const safeLaborPct = Math.min(laborPct, Math.max(0, 100 - safeCogsPct));
+  const safeRemainingPct = Math.max(0, 100 - (safeCogsPct + safeLaborPct));
+
   const kpis = [
     { label: 'صافي الإيرادات',  value: financials.netRevenue,    unit: 'ر.س', highlight: false },
     { label: 'هامش الربح الإجمالي', value: financials.grossMargin, unit: '%',   highlight: financials.grossMargin < 15 },
@@ -642,6 +660,11 @@ function FinancialDataSection({ financials }: { financials: CollectedFinancials 
   ];
 
   const sortedItems = [...financials.items].sort((a, b) => b.totalRevenue - a.totalRevenue);
+  const totalPages = Math.ceil(sortedItems.length / itemsPerPage);
+  const currentItems = sortedItems.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
+  const bcgCounts = { star: 0, plowhorse: 0, puzzle: 0, dog: 0 };
+  for (const item of sortedItems) bcgCounts[item.menuCategory]++;
 
   return (
     <div className="space-y-5" dir="rtl">
@@ -668,47 +691,68 @@ function FinancialDataSection({ financials }: { financials: CollectedFinancials 
         ))}
       </div>
 
-      {/* Cost structure */}
+      {/* Prime Cost Structure */}
       <div className="rounded-lg border bg-background p-4">
-        <p className="font-semibold mb-3">هيكل التكاليف</p>
+        <p className="font-semibold mb-3">مؤشرات التكلفة الأولية (Prime Cost)</p>
         <div className="grid grid-cols-3 gap-3 text-center mb-3">
           <div>
-            <p className="text-muted-foreground">تكاليف متغيرة</p>
-            <p className="font-bold tabular-nums">{fmt(financials.variableCosts)} ر.س</p>
+            <p className="text-muted-foreground">تكلفة المواد</p>
+            <p className="font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
+              {cogsPct.toFixed(1)}%
+            </p>
           </div>
           <div>
-            <p className="text-muted-foreground">تكاليف ثابتة</p>
-            <p className="font-bold tabular-nums">{fmt(financials.fixedCosts)} ر.س</p>
+            <p className="text-muted-foreground">تكلفة العمالة</p>
+            <p className="font-bold tabular-nums text-blue-600 dark:text-blue-400">
+              {laborPct.toFixed(1)}%
+            </p>
           </div>
           <div>
-            <p className="text-muted-foreground">إجمالي التكاليف</p>
-            <p className="font-bold tabular-nums">{fmt(financials.totalCosts)} ر.س</p>
+            <p className="text-muted-foreground">التكلفة الإجمالية</p>
+            <p className="font-bold tabular-nums text-amber-600 dark:text-amber-400">
+              {totalPrimePct.toFixed(1)}%
+            </p>
           </div>
         </div>
-        {financials.totalCosts > 0 && (
+        {financials.netRevenue > 0 && (
           <div className="flex rounded-full overflow-hidden h-2">
             <div
-              className="bg-amber-400"
-              style={{ width: `${(financials.variableCosts / financials.totalCosts) * 100}%` }}
+              className="bg-emerald-500"
+              style={{ width: `${safeCogsPct}%` }}
             />
             <div
-              className="bg-slate-400"
-              style={{ width: `${(financials.fixedCosts / financials.totalCosts) * 100}%` }}
+              className="bg-blue-500"
+              style={{ width: `${safeLaborPct}%` }}
+            />
+            <div
+              className="bg-slate-200 dark:bg-slate-800"
+              style={{ width: `${safeRemainingPct}%` }}
             />
           </div>
         )}
         <div className="flex gap-4 mt-2 justify-center">
-          <span className="flex items-center gap-1.5 text-muted-foreground"><span className="size-2 rounded-full bg-amber-400 shrink-0" />متغيرة</span>
-          <span className="flex items-center gap-1.5 text-muted-foreground"><span className="size-2 rounded-full bg-slate-400 shrink-0" />ثابتة</span>
+          <span className="flex items-center gap-1.5 text-muted-foreground text-xs"><span className="size-2 rounded-full bg-emerald-500 shrink-0" />مواد (COGS)</span>
+          <span className="flex items-center gap-1.5 text-muted-foreground text-xs"><span className="size-2 rounded-full bg-blue-500 shrink-0" />عمالة مباشرة</span>
+          <span className="flex items-center gap-1.5 text-muted-foreground text-xs"><span className="size-2 rounded-full bg-slate-200 dark:bg-slate-800 shrink-0" />هامش متبقي</span>
         </div>
       </div>
-
+      
       {/* Menu engineering table */}
       {sortedItems.length > 0 && (
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">هندسة قائمة المنتجات</CardTitle>
-            <CardDescription>تصنيف BCG لكل منتج حسب هامش الربح والحجم</CardDescription>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <CardTitle className="text-base">هندسة قائمة المنتجات</CardTitle>
+                <CardDescription>تصنيف BCG لـ {sortedItems.length} منتج</CardDescription>
+              </div>
+              <div className="flex gap-1.5 flex-wrap">
+                {bcgCounts.star > 0 && <span className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300 rounded px-2 py-0.5 text-xs font-medium">نجم: {bcgCounts.star}</span>}
+                {bcgCounts.plowhorse > 0 && <span className="bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 rounded px-2 py-0.5 text-xs font-medium">حصان: {bcgCounts.plowhorse}</span>}
+                {bcgCounts.puzzle > 0 && <span className="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 rounded px-2 py-0.5 text-xs font-medium">لغز: {bcgCounts.puzzle}</span>}
+                {bcgCounts.dog > 0 && <span className="bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300 rounded px-2 py-0.5 text-xs font-medium">كلب: {bcgCounts.dog}</span>}
+              </div>
+            </div>
           </CardHeader>
           <CardContent className="p-0">
             <Table>
@@ -723,7 +767,7 @@ function FinancialDataSection({ financials }: { financials: CollectedFinancials 
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {sortedItems.map((item, i) => {
+                {currentItems.map((item, i) => {
                   const catCfg = MENU_CATEGORY_CFG[item.menuCategory];
                   return (
                     <TableRow key={i} className={cn(item.isBelowCost && "bg-red-50/40 dark:bg-red-950/10")}>
@@ -752,6 +796,33 @@ function FinancialDataSection({ financials }: { financials: CollectedFinancials 
                 })}
               </TableBody>
             </Table>
+            
+            {/* Pagination Controls */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between border-t px-4 py-3 bg-muted/20">
+                <span className="text-xs text-muted-foreground">
+                  صفحة {currentPage} من {totalPages}
+                </span>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                    className="flex items-center gap-1 rounded-md border bg-background px-3 py-1.5 text-sm font-medium transition-colors hover:bg-muted disabled:opacity-50 disabled:pointer-events-none"
+                  >
+                    <ChevronRight className="size-4" />
+                    السابق
+                  </button>
+                  <button
+                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                    disabled={currentPage === totalPages}
+                    className="flex items-center gap-1 rounded-md border bg-background px-3 py-1.5 text-sm font-medium transition-colors hover:bg-muted disabled:opacity-50 disabled:pointer-events-none"
+                  >
+                    التالي
+                    <ChevronLeft className="size-4" />
+                  </button>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
@@ -1270,7 +1341,7 @@ export function ReportView({
           </TabsList>
         </div>
 
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto report-scroll">
           <div className="mx-auto max-w-4xl px-6 py-6">
             {tabSections.map((section) => {
               let collectedContent: React.ReactNode = undefined;

@@ -109,8 +109,3 @@ src/store/        # Zustand state management
 
 ### Package Manager
 - **Use `pnpm`** — not npm, not yarn.
-
-
-The last completed phase is Phase 4: Generation UX, which we just finished.
-The remaining phases from the original roadmap are:
-- Phase 5: Report History & Comparison — List past workflow runs, side-by-side comparison of two reports (metric deltas), thread/chat continuity from history, export to PDF/Excel.

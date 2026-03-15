@@ -26,6 +26,8 @@
   --color-input: var(--input);
   --color-border: var(--border);
   --color-destructive: var(--destructive);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
   --color-muted-foreground: var(--muted-foreground);
@@ -49,6 +51,13 @@
 
 :root {
   --radius: 0.625rem;
+  /* Brand Colors - Light Mode (fallback) */
+  --obsidian: 3.1 0.01 240;       /* #08090A */
+  --electric-cobalt: 239 100% 67%; /* #2E5BFF */
+  --deep-navy: 222 47% 11%;       /* #141A29 */
+  --silver-mist: 210 20% 88%;     /* #E1E4E8 */
+  --vivid-cyan: 189 100% 50%;      /* #00D1FF */
+
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
@@ -64,6 +73,8 @@
   --accent: oklch(0.97 0 0);
   --accent-foreground: oklch(0.205 0 0);
   --destructive: oklch(0.577 0.245 27.325);
+  --success: oklch(0.72 0.18 160);   /* Emerald green */
+  --success-foreground: oklch(0.98 0.02 160);
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
   --ring: oklch(0.708 0 0);
@@ -83,37 +94,46 @@
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
+  /* Brand Colors - Executive Dark Mode */
+  --obsidian: 240 5% 4%;          /* #050505 - Deepest Black */
+  --midnight-navy: 245 100% 4%;  /* #000B26 - Midnight Navy */
+  --pure-ai-blue: 239 100% 50%;   /* #001CFF - Pure AI Blue */
+  --vivid-blue: 239 100% 67%;     /* #2E5BFF - Vivid Blue */
+  --steel-white: 210 20% 98%;     /* #F8F9FF - Steel White */
+
+  --background: oklch(0.02 0.01 240);        /* Deepest Black */
+  --foreground: oklch(0.88 0.02 240);        /* Steel White */
+  --card: oklch(0.08 0.02 240);              /* Midnight Navy */
+  --card-foreground: oklch(0.88 0.02 240);  /* Steel White */
+  --popover: oklch(0.08 0.02 240);           /* Midnight Navy */
+  --popover-foreground: oklch(0.88 0.02 240);
+  --primary: oklch(0.6 0.22 265);             /* Vivid Blue */
+  --primary-foreground: oklch(0.98 0.02 240);
+  --secondary: oklch(0.08 0.02 240);
+  --secondary-foreground: oklch(0.88 0.02 240);
+  --muted: oklch(0.08 0.02 240);
+  --muted-foreground: oklch(0.6 0.02 240);
+  --accent: oklch(0.65 0.22 265);             /* Vivid Blue slightly shifted */
+  --accent-foreground: oklch(0.98 0.02 240);
   --destructive: oklch(0.704 0.191 22.216);
+  --success: oklch(0.72 0.18 160);             /* Emerald green */
+  --success-foreground: oklch(0.98 0.02 160);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
+  --ring: oklch(0.6 0.22 265);               /* Vivid Blue */
   --chart-1: oklch(0.488 0.243 264.376);
   --chart-2: oklch(0.696 0.17 162.48);
   --chart-3: oklch(0.769 0.188 70.08);
   --chart-4: oklch(0.627 0.265 303.9);
   --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar: oklch(0.08 0.02 240);           /* Midnight Navy */
+  --sidebar-foreground: oklch(0.88 0.02 240); /* Steel White */
+  --sidebar-primary: oklch(0.6 0.22 265);   /* Vivid Blue */
+  --sidebar-primary-foreground: oklch(0.98 0.02 240);
+  --sidebar-accent: oklch(0.08 0.02 240);
+  --sidebar-accent-foreground: oklch(0.88 0.02 240);
   --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --sidebar-ring: oklch(0.6 0.22 265);
 }
 
 @layer base {
@@ -123,5 +143,16 @@
   body {
     @apply bg-background text-foreground;
     font-size: 17px;
+  }
+}
+
+@layer utilities {
+  .no-spinner::-webkit-inner-spin-button,
+  .no-spinner::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  .no-spinner {
+    -moz-appearance: textfield;
   }
 }

@@ -48,6 +48,7 @@ export const financialInputSchema = z.object({
   businessName: z.string().describe('Business name'),
   businessType: z.enum(['cafe', 'restaurant', 'cloud_kitchen', 'fine_dining']).describe('Type of F&B business'),
   placeId: z.string().describe('Google Places API place ID'),
+  googlePlaceName: z.string().optional().describe('Exact Google Places display name'),
   instagramUser: z.string().optional().describe('Instagram username (without @)'),
   tiktokUser: z.string().optional().describe('TikTok username (without @)'),
 

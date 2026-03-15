@@ -31,7 +31,8 @@
       "WebFetch(domain:www.answeroverflow.com)",
       "Bash(pnpm list:*)",
       "Bash(gh search:*)",
-      "Bash(npm view:*)"
+      "Bash(npm view:*)",
+      "Bash(npx skills:*)"
     ]
   }
 }

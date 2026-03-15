@@ -47,7 +47,7 @@ export function BusinessSidebar({ manifest, isGenerating, collectedData }: Props
   const [hoursOpen, setHoursOpen] = useState(false);
 
   return (
-    <Sidebar side="left" dir="rtl" collapsible="none">
+    <Sidebar side="left" dir="rtl" collapsible="none" className="border-l">
       <SidebarHeader className="border-b px-4 py-4">
         <div className="space-y-0.5">
           <h1 className="text-sm font-bold tracking-wide">CBO.AI</h1>

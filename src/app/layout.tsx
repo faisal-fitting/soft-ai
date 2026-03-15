@@ -19,7 +19,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="ar" dir="rtl" className={`${fontSans.variable} font-sans`}>
+    <html lang="ar" dir="rtl" className={`${fontSans.variable} font-sans dark`}>
       <body className="antialiased">
         <DirectionProvider direction="rtl">{children}</DirectionProvider>
       </body>
