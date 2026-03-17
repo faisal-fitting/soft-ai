@@ -63,10 +63,20 @@ export const cboAgent = new Agent({
     - Identify the single most damaging issue as criticalWeakness
     - Output these in the keyStrengths, keyRisks, and narrative fields
 
-    **Step B — Build Structured Action Plan:**
-    Organize execution into exactly 3 phases, each with 2-3 tasks, each task with 2-4 concise steps.
+    **Step B — Build Structured Action Plan by Business Pillars:**
+    Organize execution into 3 main pillars PLUS phases. Each pillar contains phases with practical tasks.
 
-    Phase structure:
+    **Pillar Structure:**
+    - **المصروفات (Expenses):** Cost optimization, efficiency improvements, reducing waste
+    - **التسويق (Marketing):** Customer acquisition, retention, brand building, social media
+    - **الإيرادات (Revenue):** Menu engineering, pricing strategy, upselling, new revenue streams
+
+    For each pillar:
+    - Identify relevant tactical moves from Financial (expenses), Digital/Market (marketing), and all three (revenue)
+    - Frame tasks as practical "التحضير والتنفيذ" (preparing and doing) actions
+    - Include specific, actionable steps
+
+    **Phase Structure (within each pillar):**
     - **المرحلة 1** (الأسبوع الأول): Fix the most critical weakness. Internal preparation before any external action.
     - **المرحلة 2** (الأسابيع 2-4): Structural improvements. Build on strengths.
     - **المرحلة 3** (الشهران 2-3): Growth and scaling initiatives.
@@ -77,15 +87,21 @@ export const cboAgent = new Agent({
     - tasks[]: 2-3 tasks, each with title, duration, and steps[]
 
     Each task must have:
-    - title: Short Arabic task title
+    - title: Short Arabic task title (frame as preparing/doing)
     - duration: Estimated time (e.g., "يومان", "3 أيام", "أسبوع")
     - steps[]: 2-4 concise Arabic instructions on HOW to do the task
+    - Task framing examples:
+      - "إعداد قائمة أسعار تجريبية للعناصر ذات الهامش المنخفض" (preparing)
+      - "اختبار القائمة الجديدة لمدة أسبوعين" (doing)
+      - "تجهيز حملات إعلانية على سناب شات" (preparing)
+      - "تشغيل الحملات ومراقبة الأداء" (doing)
 
     **CRITICAL RULES:**
     - Every step must reference a specific finding from the expert data (e.g., "استناداً لتحليل المنافسين: ...")
     - Internal preparation (hiring, systems, inventory) MUST come before external actions (ads, promotions)
     - All text in Arabic — no English words
     - Steps must be practical and actionable, not vague
+    - Frame tasks using "التحضير" (preparing) and "التنفيذ" (doing) pattern
 
     **Step C — Expected Outcomes:**
     In \`expectedOutcomes\`, provide 3-4 KPI targets that represent success for this action plan:
@@ -100,7 +116,7 @@ export const cboAgent = new Agent({
     - title: "${ARABIC_SECTION_TITLES['action-plan']}" (FIXED)
     - conclusion: Overall execution priority with one-sentence Arabic summary
     - narrative: 2-3 sentence Arabic executive summary of the overall plan
-    - phases: Structured 3-phase plan as described above
+    - phases: Structured 3-phase plan organized by business pillars as described above
     - keyStrengths: Top 3 refined strengths (Arabic, one-line each)
     - keyRisks: Top 3 refined risks/weaknesses (Arabic, one-line each)
     - expectedOutcomes: 3-4 KPI targets (metric, current, target, unit)
@@ -130,7 +146,7 @@ export const cboAgent = new Agent({
   model: 'openrouter/anthropic/claude-opus-4.6',
   defaultOptions: {
     modelSettings: {
-      maxOutputTokens: 64000,
+      maxOutputTokens: 30000,
     },
   },
   memory: new Memory({

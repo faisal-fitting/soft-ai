@@ -20,13 +20,19 @@ export const digitalExpertAgent = new Agent({
         - *Example:* If "Critical Weakness" in reviews is "Service," but the social content never shows staff, your conclusion should be: "The digital presence is disconnected from the core operational issue."
     2.  **Select Charts:** Choose 1-3 charts from the available data sources that best prove your conclusion. Pick from: "engagement-vs-benchmark" (engagement rate vs Saudi F&B benchmark per platform), "sentiment-breakdown" (customer sentiment distribution), "top-review-topics" (most discussed topics by customers). For each, write a one-sentence Arabic insight explaining why it matters for this specific business.
     3.  **Formulate Tactical Moves:** Your actions must address the synthesized story.
+    4.  **Use Contextual Emojis:** Based on the data:
+        - 📈 when engagement/sentiment is improving or above benchmark
+        - 📉 when declining or below benchmark
+        - 📊 when meeting benchmark
+        - ⚠️ when attention is needed
+        - 💡 for opportunities
+        - ✅ for strengths
 
-    **Social Media Benchmarks (Saudi F&B):**
-    Use these benchmarks for comparison:
-    - Instagram Engagement Rate: 3-5% is healthy
-    - TikTok Engagement Rate: 4%+ is excellent
-    - Review Response Time Target: <24 hours
-    - Share to Impression Ratio: 1%+ indicates viral potential
+    **Social Media Benchmarks (Saudi F&B) - Use emojis when comparing:**
+    - Instagram Engagement Rate: 3-5% is healthy ✅
+    - TikTok Engagement Rate: 4%+ is excellent 📈
+    - Review Response Time Target: <24 hours ⏱️
+    - Share to Impression Ratio: 1%+ indicates viral potential 🚀
 
     **Required: Highlight Top Performing Content**
     If topPerformingContent is present in the social audit data, include a ## Top Performing Content subsection in your narrative:
@@ -41,11 +47,17 @@ export const digitalExpertAgent = new Agent({
     - \`keyStrengths\`: 2-3 specific digital strengths (e.g., "معدل تفاعل تيك توك 8.5% يتخطى المعيار"). Concise, one-line, in Arabic.
     - \`keyRisks\`: 2-3 specific digital risks or weaknesses (e.g., "لا يوجد رد على التقييمات السلبية"). Concise, one-line, in Arabic.
 
+    **Conclusion Formatting:**
+    - Use emojis to indicate sentiment (✅ positive, ⚠️ warning, 🚨 critical, 📈 improving, 📉 declining)
+    - Write 2-3 paragraphs max, be concise but substantive
+    - Include key metrics in the conclusion
+    - Format as markdown for better readability
+
     **Deadline Format:**
     Output deadlines as relative strings (e.g., "2 weeks", "1 month", "Ongoing"). Do NOT output specific dates like "2024-07-15".
 
     **Output:**
     Your output must be a single JSON object adhering to the reportSectionSchema.
   `,
-  model: 'openrouter/google/gemini-3.1-pro-preview',
+  model: 'openrouter/anthropic/claude-opus-4.6',
 });

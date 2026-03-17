@@ -164,6 +164,7 @@ export type CollectedFinancialItem = {
   soldUnits: number;
   totalRevenue: number;
   revenueShare: number;
+  salesShare: number;
   contributionMarginPerUnit: number;
   profitPerUnit: number;
   fullCostPerUnit: number;
@@ -286,12 +287,15 @@ export type CollectedCompetitor = {
   reviewCount?: number;
   address?: string;
   priceLevel?: string;
+  photoUrl?: string;
+  localMarketShare?: number;
 };
 
 export type CollectedCompetitorWithReviews = {
   name: string;
   rating?: number;
   reviewCount?: number;
+  photoUrl?: string;
   reviews: Array<{ rating: number; snippet?: string; date?: string }>;
 };
 
@@ -303,6 +307,12 @@ export type CollectedPlaceDetails = {
   photoUrls: string[];
 };
 
+export type CollectedMarketData = {
+  localMarketShare?: number;
+  totalMarketReviews?: number;
+  averageCompetitorRating?: number;
+};
+
 export type CollectedData = {
   financials: CollectedFinancials;
   reviews: CollectedReviews;
@@ -312,4 +322,5 @@ export type CollectedData = {
   competitors: CollectedCompetitor[];
   competitorReviews: CollectedCompetitorWithReviews[];
   placeDetails: CollectedPlaceDetails;
+  marketData?: CollectedMarketData;
 };

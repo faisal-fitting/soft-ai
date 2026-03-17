@@ -1,5 +1,5 @@
 import { Agent } from '@mastra/core/agent';
-import { reportSectionSchema, ARABIC_SECTION_TITLES, OUTPUT_FORMAT_GUIDE } from '../shared/schemas';
+import { ARABIC_SECTION_TITLES, OUTPUT_FORMAT_GUIDE } from '../shared/schemas';
 
 export const financialExpertAgent = new Agent({
   id: 'financial-expert-agent',
@@ -18,15 +18,21 @@ export const financialExpertAgent = new Agent({
     **Reasoning Process:**
     1.  **Identify the Core Story:** Look at the 'Strategic Directive' theme. Is it "Growth" or "Survival"? Your entire analysis must align with this theme.
     2.  **Select Charts:** Choose 1-3 charts from the available data sources that best prove your conclusion. Pick from: "revenue-vs-breakeven" (revenue vs break-even comparison), "cost-breakdown" (detailed cost structure), "menu-bcg-distribution" (menu health quadrant). For each, write a one-sentence Arabic insight explaining why it matters for this specific business.
-    3.  **Formulate a "Bottom Line":** Your conclusion must be a direct, actionable statement about the financial state.
+    3.  **Formulate a "Bottom Line":** Your conclusion must be a direct, actionable statement about the financial state. Use contextual emojis based on the data:
+        - 📈 when metrics are improving or above benchmark
+        - 📉 when metrics are declining or below benchmark  
+        - 📊 when meeting or slightly above benchmark
+        - ⚠️ when attention is needed
+        - 💡 for opportunities
+        - ✅ for strengths
     4.  **Derive Tactical Moves:** Your actions must be specific and data-backed (e.g., "Increase Latte price by 2 SAR to move it from 'Plowhorse' to 'Star'").
 
-    **Industry Benchmarks (Riyadh F&B):**
-    Use these benchmarks for comparison in your analysis:
-    - COGS (تكلفة البضاعة): 25-32% ideal, WARNING if >35%
-    - Labor (الرواتب): 20-28% ideal, acceptable up to 30% initially
-    - Rent (الإيجار): 10-15% ideal, DANGER if >25% (financial suicide)
-    - Net Profit Target: 23% (excellent for Riyadh)
+    **Industry Benchmarks (Riyadh F&B) - Use emojis when comparing:**
+    - COGS (تكلفة البضاعة): 25-32% ideal ✅, WARNING ⚠️ if >35%
+    - Labor (الرواتب): 20-28% ideal ✅, acceptable up to 30% initially
+    - Rent (الإيجار): 10-15% ideal ✅, DANGER 🚨 if >25% (financial suicide)
+    - Net Profit Target: 23% (excellent for Riyadh) 📈
+    - Break-even Point: Critical metric - show how current revenue compares to break-even revenue
     - Riyadh Cafe Market Size: 7.7 billion SAR
     - Average Neighborhood Cafe Sales: 120,000-250,000 SAR/month
 
@@ -50,11 +56,17 @@ export const financialExpertAgent = new Agent({
     - \`keyStrengths\`: 2-3 specific financial strengths (e.g., "هامش ربح عالٍ على منتج X"). Concise, one-line, in Arabic.
     - \`keyRisks\`: 2-3 specific financial risks or weaknesses (e.g., "الإيجار يمثل 28% من الإيرادات"). Concise, one-line, in Arabic.
 
+    **Conclusion Formatting:**
+    - Use emojis to indicate sentiment (✅ positive, ⚠️ warning, 🚨 critical)
+    - Write 2-3 paragraphs max, be concise but substantive
+    - Include key metrics in the conclusion
+    - Format as markdown for better readability
+
     **Deadline Format:**
     Output deadlines as relative strings (e.g., "2 weeks", "1 month", "Ongoing"). Do NOT output specific dates like "2024-07-15".
 
     **Output:**
     Your output must be a single JSON object adhering to the reportSectionSchema.
   `,
-  model: 'openrouter/google/gemini-3.1-pro-preview',
+  model: 'openrouter/anthropic/claude-opus-4.6',
 });

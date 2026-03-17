@@ -209,15 +209,54 @@ export async function getCollectedData(runId: string): Promise<CollectedData | n
       : { healthScore: 5, platformBenchmarks: [], contentStrategyGap: '', viralitySignals: { shareToImpressionRatio: 0, growthPotential: 'low' } };
 
     // ── Competitors ───────────────────────────────────────────────────────────
-    const competitors: CollectedData['competitors'] = (mergedStep.nearbyCompetitors ?? [])
-      .map((c: any) => ({
-        name: c.displayName?.text ?? c.id,
-        rating: c.rating,
-        reviewCount: c.userRatingCount,
-        address: c.formattedAddress,
-        priceLevel: c.priceLevel,
-      }))
+    // Calculate local market share: weight = reviewCount * rating
+    const targetReviewCount = mergedStep.placeDetails?.userRatingCount ?? 0;
+    const targetRating = mergedStep.placeDetails?.rating ?? 0;
+    const targetWeight = targetReviewCount * targetRating;
+
+    const competitorsData = (mergedStep.nearbyCompetitors ?? []) as any[];
+    const competitorWeights = competitorsData.map(c => ({
+      weight: (c.userRatingCount ?? 0) * (c.rating ?? 0),
+      rating: c.rating,
+      reviewCount: c.userRatingCount,
+    }));
+    const totalCompetitorWeight = competitorWeights.reduce((sum, w) => sum + w.weight, 0);
+    const totalMarketWeight = targetWeight + totalCompetitorWeight;
+
+    // Calculate local market share for target business
+    const localMarketShare = totalMarketWeight > 0 ? (targetWeight / totalMarketWeight) * 100 : 0;
+
+    // Build competitor list with photos and market share
+    const competitors: CollectedData['competitors'] = competitorsData
+      .map((c: any) => {
+        const weight = (c.userRatingCount ?? 0) * (c.rating ?? 0);
+        const share = totalMarketWeight > 0 ? (weight / totalMarketWeight) * 100 : 0;
+        const photoUrl = c.photos?.[0]?.name
+          ? `https://places.googleapis.com/v1/${c.photos[0].name}/media?maxHeightPx=150&key=${process.env.GOOGLE_PLACES_API_KEY ?? ''}`
+          : undefined;
+        return {
+          name: c.displayName?.text ?? c.id,
+          rating: c.rating,
+          reviewCount: c.userRatingCount,
+          address: c.formattedAddress,
+          priceLevel: c.priceLevel,
+          photoUrl,
+          localMarketShare: share,
+        };
+      })
       .sort((a: any, b: any) => (b.rating ?? 0) - (a.rating ?? 0));
+
+    // Calculate market data
+    const competitorRatings = competitorWeights.filter(w => w.rating != null).map(w => w.rating);
+    const averageCompetitorRating = competitorRatings.length > 0
+      ? competitorRatings.reduce((a, b) => a + b, 0) / competitorRatings.length
+      : 0;
+
+    const marketData: CollectedData['marketData'] = {
+      localMarketShare,
+      totalMarketReviews: targetReviewCount + competitorsData.reduce((sum: number, c: any) => sum + (c.userRatingCount ?? 0), 0),
+      averageCompetitorRating: Math.round(averageCompetitorRating * 10) / 10,
+    };
 
     const competitorReviews: CollectedData['competitorReviews'] = (mergedStep.competitorReviews ?? [])
       .map((cr: any) => ({
@@ -250,7 +289,7 @@ export async function getCollectedData(runId: string): Promise<CollectedData | n
       photoUrls,
     };
 
-    return { financials, reviews, socialProfiles, semantic, socialAudit, competitors, competitorReviews, placeDetails };
+    return { financials, reviews, socialProfiles, semantic, socialAudit, competitors, competitorReviews, placeDetails, marketData };
   } catch (err) {
     console.error(`[getCollectedData] failed for runId=${runId}:`, err);
     return null;

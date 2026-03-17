@@ -52,6 +52,7 @@ import type {
   CollectedSocialAudit,
   CollectedCompetitor,
   CollectedCompetitorWithReviews,
+  CollectedMarketData,
 } from "@/lib/types";
 import { MessageResponse } from "@/components/ai-elements/message";
 import { DataBarChart } from "@/components/charts/bar-chart";
@@ -243,7 +244,7 @@ function SentimentBreakdownChart({ themes, insight }: { themes: CollectedData['s
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-base">توزيع مشاعر العملاء</CardTitle>
+        <CardTitle className="text-base">توزيع انطباعات العملاء</CardTitle>
       </CardHeader>
       <CardContent>
         <DataPieChart data={data} />
@@ -262,7 +263,7 @@ function TopReviewTopicsChart({ topics, insight }: { topics: CollectedData['revi
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-base">أكثر المواضيع ذكراً في التقييمات</CardTitle>
+        <CardTitle className="text-base">أكثر المواضيع ذكراً في التعليقات</CardTitle>
       </CardHeader>
       <CardContent>
         <DataBarChart data={data} valueLabel="عدد الذكر" />
@@ -646,18 +647,20 @@ function FinancialDataSection({ financials }: { financials: CollectedFinancials 
   const safeLaborPct = Math.min(laborPct, Math.max(0, 100 - safeCogsPct));
   const safeRemainingPct = Math.max(0, 100 - (safeCogsPct + safeLaborPct));
 
-  const kpis = [
-    { label: 'صافي الإيرادات',  value: financials.netRevenue,    unit: 'ر.س', highlight: false },
-    { label: 'هامش الربح الإجمالي', value: financials.grossMargin, unit: '%',   highlight: financials.grossMargin < 15 },
-    { label: 'هامش الربح الصافي',   value: financials.netMargin,   unit: '%',   highlight: financials.netMargin < 5  },
-    {
+    const kpis = [
+      { label: 'صافي الإيرادات',  value: financials.netRevenue,    unit: 'ر.س', highlight: false },
+      { label: 'نقطة التعادل', value: financials.breakEvenRevenue, unit: 'ر.س',   highlight: financials.breakEvenRevenue > financials.netRevenue * 1.1 }, // Highlight if break-even is significantly above revenue
+      {
       label: financials.isAboveBreakEven ? 'فوق نقطة التعادل' : 'تحت نقطة التعادل',
       value: Math.abs(financials.breakEvenGap),
       unit: 'ر.س',
       highlight: !financials.isAboveBreakEven,
       positive: financials.isAboveBreakEven,
     },
-  ];
+      {
+        label: 'الهامش الصافي',   value: financials.netMargin,   unit: '%',   highlight: financials.netMargin < 5,
+      },
+    ];
 
   const sortedItems = [...financials.items].sort((a, b) => b.totalRevenue - a.totalRevenue);
   const totalPages = Math.ceil(sortedItems.length / itemsPerPage);
@@ -761,7 +764,8 @@ function FinancialDataSection({ financials }: { financials: CollectedFinancials 
                   <TableHead className="text-right">المنتج</TableHead>
                   <TableHead className="text-right">السعر</TableHead>
                   <TableHead className="text-right">الوحدات</TableHead>
-                  <TableHead className="text-right">الإيراد</TableHead>
+                  <TableHead className="text-right">نسبة المبيعات</TableHead>
+                  <TableHead className="text-right">نسبة الإيرادات</TableHead>
                   <TableHead className="text-right">هامش/وحدة</TableHead>
                   <TableHead className="text-right">التصنيف</TableHead>
                 </TableRow>
@@ -779,7 +783,8 @@ function FinancialDataSection({ financials }: { financials: CollectedFinancials 
                       </TableCell>
                       <TableCell className="tabular-nums">{fmt(item.sellingPrice)} ر.س</TableCell>
                       <TableCell className="tabular-nums">{fmt(item.soldUnits)}</TableCell>
-                      <TableCell className="tabular-nums">{fmt(item.totalRevenue)} ر.س</TableCell>
+                      <TableCell className="tabular-nums">{item.salesShare?.toFixed(1)}%</TableCell>
+                      <TableCell className="tabular-nums">{item.revenueShare?.toFixed(1)}%</TableCell>
                       <TableCell className={cn(
                         "tabular-nums",
                         item.contributionMarginPerUnit < 0 ? "text-red-500" : "text-emerald-600"
@@ -862,7 +867,7 @@ function SocialProfileCard({ profile }: { profile: CollectedSocialProfile }) {
               <img
                 src={profile.profilePicUrl}
                 alt={`@${profile.username}`}
-                className="size-10 rounded-full object-cover border shrink-0"
+                className="size-16 rounded-full object-cover border shrink-0"
               />
             ) : (
               <div className={cn(
@@ -887,7 +892,7 @@ function SocialProfileCard({ profile }: { profile: CollectedSocialProfile }) {
                 )}
               </div>
               {profile.bio && (
-                <p className="text-muted-foreground line-clamp-1 mt-0.5">{profile.bio}</p>
+                <p className="text-muted-foreground mt-0.5">{profile.bio}</p>
               )}
             </div>
           </div>
@@ -1156,11 +1161,19 @@ function DigitalDataSection({
 function MarketDataSection({
   competitors,
   competitorReviews,
+  marketData,
 }: {
   competitors: CollectedCompetitor[];
   competitorReviews: CollectedCompetitorWithReviews[];
+  marketData?: CollectedMarketData;
 }) {
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
+  
   if (competitors.length === 0) return null;
+
+  const totalPages = Math.ceil(competitors.length / itemsPerPage);
+  const currentCompetitors = competitors.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   const PRICE_LABELS: Record<string, string> = {
     PRICE_LEVEL_FREE:           'مجاني',
@@ -1172,26 +1185,59 @@ function MarketDataSection({
 
   return (
     <div className="space-y-6" dir="rtl">
-      {/* Competitor table */}
+      {/* Market Share Summary */}
+      {marketData && (
+        <Card>
+          <CardContent className="pt-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">حصة السوق المحلية</p>
+                <p className="text-2xl font-bold">{marketData.localMarketShare?.toFixed(1) ?? '—'}%</p>
+              </div>
+              <div className="text-left rtl:text-right">
+                <p className="text-sm text-muted-foreground">إجمالي تقييمات السوق</p>
+                <p className="text-lg font-semibold">{marketData.totalMarketReviews?.toLocaleString('ar-SA') ?? '—'}</p>
+              </div>
+              <div className="text-left rtl:text-right">
+                <p className="text-sm text-muted-foreground">متوسط تقييم المنافسين</p>
+                <p className="text-lg font-semibold">{marketData.averageCompetitorRating?.toFixed(1) ?? '—'}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Unified Competitor Matrix Table */}
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">المنافسون القريبون ({competitors.length})</CardTitle>
+          <CardTitle className="text-base"> المنافسين ({competitors.length})</CardTitle>
           <CardDescription>مرتبون حسب التقييم الأعلى</CardDescription>
         </CardHeader>
         <CardContent className="p-0">
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="text-right w-16">الصورة</TableHead>
                 <TableHead className="text-right">الاسم</TableHead>
                 <TableHead className="text-right">التقييم</TableHead>
                 <TableHead className="text-right">التقييمات</TableHead>
+                <TableHead className="text-right">حصة السوق</TableHead>
                 <TableHead className="text-right">السعر</TableHead>
-                <TableHead className="text-right">العنوان</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {competitors.map((comp, i) => (
+              {currentCompetitors.map((comp, i) => (
                 <TableRow key={i}>
+                  <TableCell>
+                    {comp.photoUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={comp.photoUrl} alt="" className="w-12 h-12 rounded-lg object-cover" />
+                    ) : (
+                      <div className="w-12 h-12 rounded-lg bg-muted flex items-center justify-center">
+                        <Globe className="size-5 text-muted-foreground" />
+                      </div>
+                    )}
+                  </TableCell>
                   <TableCell className="font-medium">{comp.name}</TableCell>
                   <TableCell>
                     {comp.rating != null ? (
@@ -1204,16 +1250,47 @@ function MarketDataSection({
                   <TableCell className="tabular-nums text-muted-foreground">
                     {comp.reviewCount != null ? comp.reviewCount.toLocaleString('ar-SA') : '—'}
                   </TableCell>
+                  <TableCell>
+                    {comp.localMarketShare != null ? (
+                      <span className={comp.localMarketShare > 10 ? "text-emerald-600 font-medium" : comp.localMarketShare > 5 ? "text-amber-600" : "text-muted-foreground"}>
+                        {comp.localMarketShare.toFixed(1)}%
+                      </span>
+                    ) : '—'}
+                  </TableCell>
                   <TableCell className="text-muted-foreground">
                     {comp.priceLevel ? (PRICE_LABELS[comp.priceLevel] ?? comp.priceLevel) : '—'}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground max-w-48">
-                    <span className="line-clamp-1">{comp.address ?? '—'}</span>
                   </TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
+          
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between border-t px-4 py-3 bg-muted/20">
+              <span className="text-xs text-muted-foreground">
+                صفحة {currentPage} من {totalPages}
+              </span>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="flex items-center gap-1 rounded-md border bg-background px-3 py-1.5 text-sm font-medium transition-colors hover:bg-muted disabled:opacity-50 disabled:pointer-events-none"
+                >
+                  <ChevronRight className="size-4" />
+                  السابق
+                </button>
+                <button
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                  className="flex items-center gap-1 rounded-md border bg-background px-3 py-1.5 text-sm font-medium transition-colors hover:bg-muted disabled:opacity-50 disabled:pointer-events-none"
+                >
+                  التالي
+                  <ChevronLeft className="size-4" />
+                </button>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -1235,7 +1312,7 @@ function MarketDataSection({
                         </span>
                       )}
                       {comp.reviewCount != null && (
-                        <span className="text-muted-foreground">
+                        <span className="text-muted-foreground text-sm">
                           ({comp.reviewCount.toLocaleString('ar-SA')} تقييم)
                         </span>
                       )}
@@ -1247,10 +1324,10 @@ function MarketDataSection({
                     <div key={j} className="rounded-md border bg-muted/20 p-2 space-y-1">
                       <div className="flex items-center justify-between gap-2">
                         <StarRating rating={review.rating} />
-                        {review.date && <span className="text-muted-foreground">{review.date}</span>}
+                        {review.date && <span className="text-muted-foreground text-xs">{review.date}</span>}
                       </div>
                       {review.snippet && (
-                        <p className="text-muted-foreground line-clamp-2">{review.snippet}</p>
+                        <p className="text-muted-foreground text-xs line-clamp-3">{review.snippet}</p>
                       )}
                     </div>
                   ))}
@@ -1362,6 +1439,7 @@ export function ReportView({
                   <MarketDataSection
                     competitors={collectedData.competitors}
                     competitorReviews={collectedData.competitorReviews}
+                    marketData={collectedData.marketData}
                   />
                 );
               }

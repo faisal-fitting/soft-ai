@@ -185,15 +185,18 @@ export function computeFinancials(input: FinancialInput & { threadId?: string })
   const manufacturingCostPerUnit =
     totalMonthlyCapacity > 0 ? productionStaffCosts / totalMonthlyCapacity : 0;
 
-  // Compute total item revenue for revenueShare
-  const totalItemRevenue = items.reduce(
-    (sum, i) => sum + i.sellingPrice * i.soldUnits, 0,
-  );
+    // Compute total item revenue for revenueShare and total items sold for salesShare
+    const totalItemRevenue = items.reduce(
+      (sum, i) => sum + i.sellingPrice * i.soldUnits, 0,
+    );
+    const totalItemsSold = items.reduce((sum, i) => sum + i.soldUnits, 0);
 
-  const enrichedItems = items.map((item) => {
+    const enrichedItems = items.map((item) => {
     const totalRevenue = item.sellingPrice * item.soldUnits;
     const revenueShare =
       totalItemRevenue !== 0 ? (totalRevenue / totalItemRevenue) * 100 : 0;
+    const salesShare =
+      totalItemsSold > 0 ? (item.soldUnits / totalItemsSold) * 100 : 0;
 
     // Use totalCostPerUnit if provided (total mode), otherwise sum rawMaterial + packaging
     const itemRawMaterial = item.totalCostPerUnit ?? item.rawMaterialCostPerUnit ?? 0;
@@ -225,13 +228,14 @@ export function computeFinancials(input: FinancialInput & { threadId?: string })
         : 0;
     const isBelowCost = item.sellingPrice < variableCostPerUnit;
     const lossPerUnit = Math.max(0, variableCostPerUnit - item.sellingPrice);
-
+    
     return {
       name: item.name,
       sellingPrice: item.sellingPrice,
       soldUnits: item.soldUnits,
       totalRevenue,
       revenueShare,
+      salesShare,
       rawMaterialCostPerUnit: itemRawMaterial,
       packagingCostPerUnit: itemPackaging,
       totalCostPerUnit: item.totalCostPerUnit,

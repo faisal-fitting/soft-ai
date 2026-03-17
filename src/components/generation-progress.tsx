@@ -292,7 +292,7 @@ function SocialPreview({ preview }: { preview: ProgressPreviewSocial }) {
               {p.platform === "instagram" ? (
                 <Instagram className="size-4" />
               ) : (
-                <span className="font-bold" style={{ fontSize: "10px" }}>TT</span>
+                <span className="font-bold" style={{ fontSize: "10px" }}>Insta</span>
               )}
             </div>
             <span className="font-medium" style={{ fontSize: "12px" }}>@{p.username}</span>
