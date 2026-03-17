@@ -21,6 +21,7 @@ export type ExpectedOutcome = {
   current: number;
   target: number;
   unit: string;
+  displayPriority?: boolean;
 };
 
 // ── Action Plan Types ─────────────────────────────────────────────────────────
@@ -46,7 +47,8 @@ export type ActionPlanPhase = {
 export type ReportSection = {
   id: string;
   title: string;
-  conclusion: { text: string; severity: "success" | "warning" | "critical" };
+  conclusion: { text: string; severity: "success" | "warning" | "critical"; emoji?: string };
+  bulletPoints?: string[];
   charts?: ChartReference[];
   narrative: string;
   citations?: string[];

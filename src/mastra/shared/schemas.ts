@@ -211,6 +211,9 @@ export const competitorReviewSummarySchema = z.object({
   name: z.string().describe('Competitor business name'),
   rating: z.number().optional().describe('Overall Google rating'),
   reviewCount: z.number().optional().describe('Total number of reviews'),
+  estimatedMonthlyRevenue: z.number().optional().describe('Estimated monthly revenue based on rating × reviewCount × base factor'),
+  photoUrl: z.string().optional().describe('Photo URL from Google Places'),
+  priceLevel: z.number().optional().describe('Price level 1-4 (1=$, 4=$$$$)'),
   reviews: z.array(z.object({
     rating: z.number(),
     snippet: z.string().optional(),
@@ -284,6 +287,7 @@ export const chartDataSourceSchema = z.enum([
 export const chartReferenceSchema = z.object({
   dataSource: chartDataSourceSchema.describe('Which pre-built chart to display — the frontend renders it from collected data'),
   insight: z.string().describe('One-sentence Arabic caption explaining why this chart matters for this specific business'),
+  chartType: z.enum(['bar', 'gauge', 'table', 'matrix']).optional().describe('Visualization type override. Use "gauge" for engagement rate, "matrix" for competitor comparison'),
 });
 
 // ── Expected Outcomes (action plan KPI targets) ──
@@ -293,16 +297,19 @@ export const expectedOutcomeSchema = z.object({
   current: z.number().describe('Current value from the collected data'),
   target: z.number().describe('Realistic target value to achieve'),
   unit: z.string().describe('Unit: "%" or "SAR" or "x"'),
+  displayPriority: z.boolean().optional().describe('Whether to always display this KPI. Set to true for mandatory display'),
 });
 
 export const reportSectionSchema = z.object({
   id: z.string().describe('Section identifier, e.g. "financials", "digital", "market", "action-plan"'),
   title: z.string().describe('Fixed Arabic section title from ARABIC_SECTION_TITLES'),
   conclusion: z.object({
-    text: z.string().describe('One-sentence conclusion summarizing the section finding'),
+    text: z.string().describe('Conclusion summarizing the section finding (2-3 sentences max)'),
     severity: z.enum(['success', 'warning', 'critical']).describe('Traffic-light severity: success=healthy, warning=needs attention, critical=urgent'),
+    emoji: z.string().max(1).optional().describe('Single emoji as visual anchor. Use ONE only: ✅ for success, ⚠️ for warning, 🚨 for critical'),
   }).describe('Section conclusion with severity indicator'),
-  charts: z.array(chartReferenceSchema).max(3).optional().describe('1-3 chart references — pick from the available dataSource options that best support your conclusion. The frontend renders these from real collected data.'),
+  bulletPoints: z.array(z.string()).optional().describe('Structured bullet points for multi-point analysis. Use when section has multiple key findings to address.'),
+  charts: z.array(chartReferenceSchema).max(3).optional().describe('1-3 chart references — pick from the available dataSource options that best support your conclusion. The frontend renders it from real collected data.'),
   narrative: z.string().describe('Detailed Markdown narrative with analysis and key findings'),
   citations: z.array(z.string()).optional().describe('Source URLs or references used in the analysis'),
   tacticalMoves: z.array(z.object({

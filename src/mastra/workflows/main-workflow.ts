@@ -197,7 +197,7 @@ const fetchTargetReviews = createStep({
 
 const fetchCompetitorReviews = createStep({
   id: 'fetch-competitor-reviews',
-  description: 'Fetch reviews for top 3 competitors to enable strengths/weaknesses analysis',
+  description: 'Fetch reviews for top 6 competitors with revenue estimation and photos',
   inputSchema: z.record(z.string(), z.any()),
   outputSchema: z.object({ competitorReviews: z.array(competitorReviewSummarySchema) }),
   execute: async ({ inputData, requestContext, writer }) => {
@@ -206,23 +206,45 @@ const fetchCompetitorReviews = createStep({
 
     await writer?.write({ type: 'data-step-progress', data: { step: 'competitor-reviews', phase: 3, status: 'running', message: 'جاري جلب تقييمات المنافسين...' } });
 
-    // Pick top 3 by (rating * reviewCount) — most established competitors
-    const top3 = [...competitors]
+    // Pick top 6 by (rating * reviewCount) — most established competitors
+    const top6 = [...competitors]
       .filter(c => c.id && c.userRatingCount && c.userRatingCount > 5)
       .sort((a, b) => ((b.rating ?? 0) * (b.userRatingCount ?? 0)) - ((a.rating ?? 0) * (a.userRatingCount ?? 0)))
-      .slice(0, 3);
+      .slice(0, 6);
+
+    // Base revenue factor: 1000 SAR per (rating point × review count per month)
+    // This is a reasonable estimate for Saudi F&B market
+    const calculateEstimatedRevenue = (rating: number | undefined, reviewCount: number | undefined) => {
+      if (!rating || !reviewCount) return 0;
+      // More reviews = more established = higher base. Rating amplifies the estimate.
+      // Assume ~10% of customers leave reviews
+      const baseFactor = 1000; // SAR
+      return Math.round(rating * reviewCount * baseFactor);
+    };
+
+    const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_PLACES_API_KEY || '';
 
     const results = await Promise.allSettled(
-      top3.map(async (c) => {
+      top6.map(async (c) => {
         const data = await googleMapsReviewsTool.execute!(
           { place_id: c.id, language: 'ar', sort_by: 'qualityScore' },
           { requestContext }
         ) as any;
+
+        // Build photo URL if available
+        const photoName = c.photos?.[0]?.name;
+        const photoUrl = photoName
+          ? `https://places.googleapis.com/v1/${photoName}/media?maxHeightPx=200&key=${GOOGLE_MAPS_API_KEY}`
+          : undefined;
+
         return {
           placeId: c.id,
           name: c.displayName?.text ?? 'Unknown',
           rating: c.rating,
           reviewCount: c.userRatingCount,
+          estimatedMonthlyRevenue: calculateEstimatedRevenue(c.rating, c.userRatingCount),
+          photoUrl,
+          priceLevel: c.priceLevel ? parseInt(c.priceLevel.replace(/\D/g, '')) || 2 : 2,
           reviews: (data.reviews ?? []).slice(0, 10).map((r: any) => ({
             rating: r.rating,
             snippet: r.snippet ?? r.extracted_snippet?.original,
@@ -236,7 +258,10 @@ const fetchCompetitorReviews = createStep({
       .filter((r): r is PromiseFulfilledResult<any> => r.status === 'fulfilled')
       .map(r => r.value);
 
-    await writer?.write({ type: 'data-step-progress', data: { step: 'competitor-reviews', phase: 3, status: 'complete', message: `تم جلب تقييمات ${competitorReviews.length} منافس` } });
+    // Calculate total estimated revenue for market share calculation
+    const totalCompetitorRevenue = competitorReviews.reduce((sum, c) => sum + (c.estimatedMonthlyRevenue ?? 0), 0);
+
+    await writer?.write({ type: 'data-step-progress', data: { step: 'competitor-reviews', phase: 3, status: 'complete', message: `تم جلب تقييمات ${competitorReviews.length} منافس`, preview: { totalEstimatedRevenue: totalCompetitorRevenue } } });
     return { competitorReviews };
   },
 });
@@ -402,6 +427,14 @@ const generateFinancialSection = createStep({
   execute: async ({ inputData, mastra, writer }) => {
     await writer?.write({ type: 'data-step-progress', data: { step: 'financials', phase: 7, status: 'running', message: 'جاري تحليل الوضع المالي...' } });
     const agent = mastra?.getAgent('financialExpertAgent');
+    
+    // Calculate local market share based on competitor revenues
+    const competitorRevenues = (inputData as any).competitorReviews?.map((c: any) => c.estimatedMonthlyRevenue ?? 0) ?? [];
+    const totalCompetitorRevenue = competitorRevenues.reduce((sum: number, r: number) => sum + r, 0);
+    const targetRevenue = inputData.netRevenue ?? 0;
+    const totalMarketRevenue = targetRevenue + totalCompetitorRevenue;
+    const localMarketShare = totalMarketRevenue > 0 ? (targetRevenue / totalMarketRevenue) * 100 : 0;
+
     const prompt = `## Context
 You are a financial analyst specializing in Saudi F&B businesses.
 
@@ -422,18 +455,34 @@ ${toYaml({
   isAboveBreakEven: inputData.isAboveBreakEven,
 })}
 
-## Per-Product Data
+## Per-Product Data (includes salesShare = % of total items sold)
 ${toYaml(inputData.items)}
+
+## Local Market Context
+- Target Business Monthly Revenue: ${targetRevenue.toLocaleString()} SAR
+- Total Estimated Competitor Revenue: ${totalCompetitorRevenue.toLocaleString()} SAR
+- Target Business Local Market Share: ${localMarketShare.toFixed(1)}%
+- Average Competitor Revenue: ${competitorRevenues.length > 0 ? (totalCompetitorRevenue / competitorRevenues.length).toLocaleString() : 'N/A'} SAR/month
 
 ## Task
 Analyze the financial data and provide actionable insights.
 IMPORTANT: Use the pre-computed KPIs exactly as provided — do NOT recalculate totals from per-product data.
+IMPORTANT: Always use complete terminology - say "تكلفة البضاعة المباعة (COGS)" not just "COGS".
 
 **Chart Selection:**
 Pick 1-3 charts from: "revenue-vs-breakeven", "cost-breakdown", "menu-bcg-distribution".
 For each, write a one-sentence Arabic insight explaining why it matters for this specific business.
 
-Focus on profitability, break-even analysis, cost optimization, and menu engineering.`;
+Focus on profitability, break-even analysis, cost optimization, menu engineering, and local market positioning.
+
+**Per-Product Analysis:**
+For each menu item, emphasize:
+- revenueShare: نسبة الإيراد = (سعر البيع × الكمية المباعة / إجمالي إيراد المنتجات) × 100
+- salesShare: نسبة المبيعات = (الكمية المباعة / إجمالي الكميات المباعة) × 100
+
+**Local Market Share:**
+Include a subsection in your narrative about the target business's position in the local market based on revenue comparison with competitors.
+`;
     const response = await agent!.generate(prompt, {
       structuredOutput: {
         schema: reportSectionSchema,
@@ -504,24 +553,25 @@ const generateMarketSection = createStep({
     const prompt = `## Context
 You are a market research specialist for Saudi F&B businesses.
 
-## Data Fields (Arabic sample for output labels)
-- competitorCount: عدد المنافسين
-- averageRating: متوسط التقييم
-- priceRange: نطاق الأسعار
-- marketSaturation: تشبع السوق
-
 ## Strategic Directive
 ${inputData.directive.theme}
 
-## Nearby Competitors
-${toYaml(inputData.nearbyCompetitors.slice(0, 5))}
+## Target Business Revenue Data
+- Monthly Revenue: ${inputData.netRevenue?.toLocaleString() ?? 'N/A'} SAR
+- Google Rating: ${inputData.placeDetails?.rating ?? 'N/A'}
+- Total Reviews: ${inputData.placeDetails?.userRatingCount ?? 'N/A'}
 
-## Competitor Reviews (sampled from Google Maps)
+## Competitors with Revenue Estimates (Top 6 by market presence)
 ${toYaml(inputData.competitorReviews ?? [])}
+
+## Calculation Context:
+- Each competitor's estimated monthly revenue = rating × reviewCount × 1000 SAR
+- Target business local market share = targetRevenue / (targetRevenue + sum(allCompetitorRevenues)) × 100%
+- Reputation share = based on review sentiment and volume relative to competitors
 
 ## Task
 Analyze the market data and provide competitive insights.
-Focus on competitor positioning, pricing strategies, and market opportunities.
+Focus on competitor positioning, pricing strategies, revenue estimates, and market opportunities.
 
 **Chart Selection:**
 Pick 1-2 charts from: "rating-comparison", "review-volume".
@@ -530,14 +580,19 @@ For each, write a one-sentence Arabic insight explaining why it matters for this
 **IMPORTANT: Exclude any competitor from your analysis if they have 0 reviews AND 0 rating.**
 These are unverified or inactive listings, not real competitors.
 
-**REQUIRED: Competitor Strengths & Weaknesses Table**
-In your narrative, include a markdown table comparing each competitor:
+**REQUIRED: Unified Competitive Matrix Table**
+In your narrative, include a markdown table showing all key competitor data:
 
-| المنافس | نقاط القوة | نقاط الضعف | التقييم |
-|---------|-----------|-----------|--------|
-| اسم المنافس | قوة 1، قوة 2 | ضعف 1 | 4.5 ⭐ |
+| المنافس | التقييم | المراجعات | الإيراد المتوقع | نقاط القوة | نقاط الضعف |
+|---------|---------|----------|-----------------|-----------|-----------|
+| [الاسم] | 4.5 ⭐ | 150 | 675,000 SAR | قوة1، قوة2 | ضعف1 |
 
-Base the strengths/weaknesses on their review content above.`;
+Include photos when available. Sort by revenue estimate (highest first). Limit to 6 competitors.
+
+**Local Market Share Analysis:**
+Calculate and include:
+- Target business estimated market share percentage
+- How target compares to average competitor revenue`;
     const response = await agent!.generate(prompt, {
       structuredOutput: {
         schema: reportSectionSchema,

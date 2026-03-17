@@ -87,39 +87,46 @@ export const cboAgent = new Agent({
     - tasks[]: 2-3 tasks, each with title, duration, and steps[]
 
     Each task must have:
-    - title: Short Arabic task title (frame as preparing/doing)
+    - title: Short Arabic task title using "التحضير والتنفيذ" pattern
     - duration: Estimated time (e.g., "يومان", "3 أيام", "أسبوع")
-    - steps[]: 2-4 concise Arabic instructions on HOW to do the task
+    - steps[]: 2-4 detailed, practical Arabic instructions on HOW to do the task
     - Task framing examples:
-      - "إعداد قائمة أسعار تجريبية للعناصر ذات الهامش المنخفض" (preparing)
-      - "اختبار القائمة الجديدة لمدة أسبوعين" (doing)
-      - "تجهيز حملات إعلانية على سناب شات" (preparing)
-      - "تشغيل الحملات ومراقبة الأداء" (doing)
+      - "إعداد قائمة أسعار تجريبية للعناصر ذات الهامش المنخفض" — إعداد/تحضير
+      - "اختبار القائمة الجديدة لمدة أسبوعين" — تنفيذ
+      - "تجهيز حملات إعلانية على سناب شات" — إعداد/تحضير
+      - "تشغيل الحملات ومراقبة الأداء" — تنفيذ
 
     **CRITICAL RULES:**
-    - Every step must reference a specific finding from the expert data (e.g., "استناداً لتحليل المنافسين: ...")
+    - Steps should be practical HOW-TO instructions — do NOT reference findings or data analysis in the steps themselves
+    - The task title can reference the context, but steps should be practical action items
     - Internal preparation (hiring, systems, inventory) MUST come before external actions (ads, promotions)
     - All text in Arabic — no English words
-    - Steps must be practical and actionable, not vague
-    - Frame tasks using "التحضير" (preparing) and "التنفيذ" (doing) pattern
+    - Frame ALL tasks using "التحضير والتنفيذ" (preparing and doing) pattern
 
     **Step C — Expected Outcomes:**
-    In \`expectedOutcomes\`, provide 3-4 KPI targets that represent success for this action plan:
+    In \`expectedOutcomes\`, provide 3-4 KPI targets. Set \`displayPriority: true\` for ALL outcomes to ensure they are always displayed:
     - Pick the most impactful metrics across financial, digital, and market domains
     - Use the actual current values from the data provided (do NOT guess)
     - Set realistic, achievable target values based on Saudi F&B benchmarks
-    - Examples: { metric: "صافي الهامش", current: 4.2, target: 12, unit: "%" } or { metric: "معدل التفاعل", current: 1.1, target: 3.5, unit: "%" } or { metric: "الإيرادات الشهرية", current: 85000, target: 120000, unit: "SAR" }
+    - Examples: { metric: "صافي الهامش", current: 4.2, target: 12, unit: "%", displayPriority: true }
+
+    **Conclusion Formatting:**
+    - Use ONE emoji only as prefix: ✅ for positive, ⚠️ for warning, 🚨 for critical
+    - Write 2-3 sentences, be substantive
+
+    **Bullet Points:**
+    When the section has multiple key findings to address, use the \`bulletPoints\` array field.
 
     **Output:**
     JSON object adhering to reportSectionSchema:
     - id: "action-plan"
     - title: "${ARABIC_SECTION_TITLES['action-plan']}" (FIXED)
-    - conclusion: Overall execution priority with one-sentence Arabic summary
-    - narrative: 2-3 sentence Arabic executive summary of the overall plan
-    - phases: Structured 3-phase plan organized by business pillars as described above
+    - conclusion: Overall execution priority with Arabic summary (2-3 sentences)
+    - narrative: Arabic executive summary of the overall plan
+    - phases: Structured 3-phase plan organized by business pillars
     - keyStrengths: Top 3 refined strengths (Arabic, one-line each)
     - keyRisks: Top 3 refined risks/weaknesses (Arabic, one-line each)
-    - expectedOutcomes: 3-4 KPI targets (metric, current, target, unit)
+    - expectedOutcomes: 3-4 KPI targets (ALL with displayPriority: true)
     - Do NOT populate tacticalMoves — use phases instead
     - Do NOT populate charts — the action plan section has no charts
 

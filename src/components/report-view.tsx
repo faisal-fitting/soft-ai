@@ -91,16 +91,25 @@ function TabIcon({ sectionId }: { sectionId: string }) {
 // ── Conclusion — subtle inline treatment ─────────────────────────────────────
 
 function ConclusionBadge({ conclusion }: { conclusion: ReportSection['conclusion'] }) {
-  const severityCfg = {
-    success:  { icon: CheckCircle2,  className: "text-emerald-500" },
-    warning:  { icon: AlertTriangle, className: "text-amber-500"   },
-    critical: { icon: XCircle,       className: "text-red-500"     },
-  }[conclusion.severity];
-  const SeverityIcon = severityCfg.icon;
+  if (!conclusion) return null;
+  
+  // Use custom emoji if provided, otherwise use severity-based styling without icon
+  const emoji = conclusion.emoji;
+  
+  const severityStyles = {
+    success:  { bg: "bg-emerald-50 dark:bg-emerald-950/30", border: "border-emerald-200 dark:border-emerald-800", text: "text-emerald-700 dark:text-emerald-300" },
+    warning:  { bg: "bg-amber-50 dark:bg-amber-950/30", border: "border-amber-200 dark:border-amber-800", text: "text-amber-700 dark:text-amber-300" },
+    critical: { bg: "bg-red-50 dark:bg-red-950/30", border: "border-red-200 dark:border-red-800", text: "text-red-700 dark:text-red-300" },
+  };
+  
+  const style = severityStyles[conclusion.severity] || severityStyles.warning;
+  
   return (
-    <div className="flex items-start gap-2 mb-4 text-muted-foreground">
-      <SeverityIcon className={cn("size-4 mt-0.5 shrink-0", severityCfg.className)} />
-      <p className="leading-snug">{conclusion.text}</p>
+    <div className={cn("rounded-lg border p-4 mb-4", style.bg, style.border)}>
+      <div className="flex items-start gap-3">
+        {emoji && <span className="text-2xl">{emoji}</span>}
+        <p className={cn("leading-relaxed flex-1", style.text)}>{conclusion.text}</p>
+      </div>
     </div>
   );
 }
@@ -595,6 +604,18 @@ function SectionContent({
         <div className="flex flex-col gap-4">
           {section.charts!.map((chart, i) => (
             <ChartFromData key={i} chart={chart} collectedData={collectedData} manifest={manifest} />
+          ))}
+        </div>
+      )}
+
+      {/* Render bullet points if available */}
+      {section.bulletPoints && section.bulletPoints.length > 0 && (
+        <div className="space-y-2">
+          {section.bulletPoints.map((point, i) => (
+            <div key={i} className="flex items-start gap-2 text-right" dir="rtl">
+              <span className="text-primary mt-0.5">•</span>
+              <span>{point}</span>
+            </div>
           ))}
         </div>
       )}
@@ -1168,12 +1189,21 @@ function MarketDataSection({
   marketData?: CollectedMarketData;
 }) {
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 10;
+  const [sortBy, setSortBy] = useState<'rating' | 'reviews'>('rating');
+  const itemsPerPage = 6;
   
   if (competitors.length === 0) return null;
 
-  const totalPages = Math.ceil(competitors.length / itemsPerPage);
-  const currentCompetitors = competitors.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+  // Sort competitors by selected criteria
+  const sortedCompetitors = [...competitors].sort((a, b) => {
+    if (sortBy === 'rating') {
+      return (b.rating ?? 0) - (a.rating ?? 0);
+    }
+    return (b.reviewCount ?? 0) - (a.reviewCount ?? 0);
+  });
+
+  const totalPages = Math.ceil(sortedCompetitors.length / itemsPerPage);
+  const currentCompetitors = sortedCompetitors.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   const PRICE_LABELS: Record<string, string> = {
     PRICE_LEVEL_FREE:           'مجاني',
@@ -1210,8 +1240,33 @@ function MarketDataSection({
       {/* Unified Competitor Matrix Table */}
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-base"> المنافسين ({competitors.length})</CardTitle>
-          <CardDescription>مرتبون حسب التقييم الأعلى</CardDescription>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base"> المنافسين ({competitors.length})</CardTitle>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setSortBy('rating')}
+                className={cn(
+                  "px-2 py-1 text-xs rounded-md border transition-colors",
+                  sortBy === 'rating' 
+                    ? "bg-primary text-primary-foreground" 
+                    : "bg-background hover:bg-muted"
+                )}
+              >
+                ★ ترتيب بالتقييم
+              </button>
+              <button
+                onClick={() => setSortBy('reviews')}
+                className={cn(
+                  "px-2 py-1 text-xs rounded-md border transition-colors",
+                  sortBy === 'reviews' 
+                    ? "bg-primary text-primary-foreground" 
+                    : "bg-background hover:bg-muted"
+                )}
+              >
+                📝 ترتيب بالمراجعات
+              </button>
+            </div>
+          </div>
         </CardHeader>
         <CardContent className="p-0">
           <Table>
