@@ -95,45 +95,43 @@
 
 .dark {
   /* Brand Colors - Executive Dark Mode */
-  --obsidian: 240 5% 4%;          /* #050505 - Deepest Black */
-  --midnight-navy: 245 100% 4%;  /* #000B26 - Midnight Navy */
-  --pure-ai-blue: 239 100% 50%;   /* #001CFF - Pure AI Blue */
-  --vivid-blue: 239 100% 67%;     /* #2E5BFF - Vivid Blue */
-  --steel-white: 210 20% 98%;     /* #F8F9FF - Steel White */
+  --obsidian: 210 18% 4%;          /* #090c0d - Brand Black */
+  --cobalt-blue: 228 100% 50%;     /* #034bff - Brand Blue */
+  --steel-white: 210 20% 98%;      /* #F8F9FF - Steel White */
 
-  --background: oklch(0.02 0.01 240);        /* Deepest Black */
+  --background: oklch(0.065 0.006 213);      /* #090c0d - Brand Black */
   --foreground: oklch(0.88 0.02 240);        /* Steel White */
-  --card: oklch(0.08 0.02 240);              /* Midnight Navy */
-  --card-foreground: oklch(0.88 0.02 240);  /* Steel White */
-  --popover: oklch(0.08 0.02 240);           /* Midnight Navy */
+  --card: oklch(0.10 0.007 215);             /* Elevated surface */
+  --card-foreground: oklch(0.88 0.02 240);
+  --popover: oklch(0.10 0.007 215);
   --popover-foreground: oklch(0.88 0.02 240);
-  --primary: oklch(0.6 0.22 265);             /* Vivid Blue */
-  --primary-foreground: oklch(0.98 0.02 240);
-  --secondary: oklch(0.08 0.02 240);
+  --primary: oklch(0.49 0.28 263);           /* #034bff - Brand Blue */
+  --primary-foreground: oklch(0.98 0.01 240);
+  --secondary: oklch(0.10 0.007 215);
   --secondary-foreground: oklch(0.88 0.02 240);
-  --muted: oklch(0.08 0.02 240);
-  --muted-foreground: oklch(0.6 0.02 240);
-  --accent: oklch(0.65 0.22 265);             /* Vivid Blue slightly shifted */
-  --accent-foreground: oklch(0.98 0.02 240);
+  --muted: oklch(0.10 0.007 215);
+  --muted-foreground: oklch(0.58 0.02 230);
+  --accent: oklch(0.52 0.26 263);            /* Brand Blue lighter */
+  --accent-foreground: oklch(0.98 0.01 240);
   --destructive: oklch(0.704 0.191 22.216);
-  --success: oklch(0.72 0.18 160);             /* Emerald green */
+  --success: oklch(0.72 0.18 160);
   --success-foreground: oklch(0.98 0.02 160);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.6 0.22 265);               /* Vivid Blue */
-  --chart-1: oklch(0.488 0.243 264.376);
+  --ring: oklch(0.49 0.28 263);              /* Brand Blue */
+  --chart-1: oklch(0.49 0.28 263);           /* Brand Blue */
   --chart-2: oklch(0.696 0.17 162.48);
   --chart-3: oklch(0.769 0.188 70.08);
   --chart-4: oklch(0.627 0.265 303.9);
   --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.08 0.02 240);           /* Midnight Navy */
-  --sidebar-foreground: oklch(0.88 0.02 240); /* Steel White */
-  --sidebar-primary: oklch(0.6 0.22 265);   /* Vivid Blue */
-  --sidebar-primary-foreground: oklch(0.98 0.02 240);
-  --sidebar-accent: oklch(0.08 0.02 240);
+  --sidebar: oklch(0.055 0.005 213);         /* Slightly darker than bg */
+  --sidebar-foreground: oklch(0.88 0.02 240);
+  --sidebar-primary: oklch(0.49 0.28 263);   /* Brand Blue */
+  --sidebar-primary-foreground: oklch(0.98 0.01 240);
+  --sidebar-accent: oklch(0.10 0.007 215);
   --sidebar-accent-foreground: oklch(0.88 0.02 240);
   --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.6 0.22 265);
+  --sidebar-ring: oklch(0.49 0.28 263);
 }
 
 @layer base {
@@ -143,6 +141,12 @@
   body {
     @apply bg-background text-foreground;
     font-size: 17px;
+  }
+  .maplibregl-popup-content {
+    @apply bg-transparent! shadow-none! p-0! rounded-none!;
+  }
+  .maplibregl-popup-tip {
+    @apply hidden!;
   }
 }
 
