@@ -182,27 +182,16 @@ export function BusinessSidebar({ manifest, isGenerating, collectedData }: Props
       side="left"
       dir="rtl"
       collapsible="none"
-      className="border-l border-white/[0.06] bg-[#050505]"
+      className="border-l border-white/6 bg-[#050505]"
     >
       {/* ── Brand Header ──────────────────────────────────────────────────────── */}
-      <SidebarHeader className="border-b border-white/[0.06] px-4 py-4">
-        <div className="flex items-center gap-2.5">
-          {/* Animated brand mark */}
-          <div className="relative size-7 shrink-0">
-            <div className="absolute inset-0 rounded-[5px] border border-primary/30 bg-primary/10" />
-            <motion.div
-              className="absolute inset-0 rounded-[5px] border border-primary/20"
-              animate={{ scale: [1, 1.45, 1], opacity: [0.4, 0, 0.4] }}
-              transition={{ duration: 2.8, repeat: Infinity, ease: "easeInOut" }}
-            />
-            <div className="absolute inset-0 flex items-center justify-center">
-              <TrendingUp className="size-3.5 text-primary" />
-            </div>
-          </div>
-          <div>
-            <h1 className="text-sm font-black tracking-[0.2em] text-foreground">CBO.AI</h1>
-            <p className="text-[10px] text-muted-foreground tracking-widest uppercase">تحليل الأعمال</p>
-          </div>
+      <SidebarHeader className="border-b border-white/6 px-4 py-3">
+        <div className="flex items-center gap-2">
+          <img
+            src="/logo.png"
+            alt="CBO.AI"
+            className="h-18 w-auto mx-auto"
+          />
         </div>
       </SidebarHeader>
 
