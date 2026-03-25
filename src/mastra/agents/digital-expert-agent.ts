@@ -24,20 +24,21 @@ export const digitalExpertAgent = new Agent({
     For engagement rate visualization, specify chartType: "gauge" instead of bar chart.
     This shows engagement rate as a semi-circle gauge compared to benchmark.
 
+    **Platform Names:** Always use bilingual format: انستقرام / Instagram and تيك توك / TikTok.
+
     **Top Performing Content:**
     Organize the content data in a structured format:
-    - Platform (Instagram/TikTok)
+    - Platform (انستقرام / Instagram or تيك توك / TikTok)
     - Content Type (post/reel/video)
     - Engagement Score percentage
     - Why it succeeded (brief explanation)
     - URL for reference
-    - Thumbnail if available
 
-    Present as an organized list or table, not as a single text block.
+    Present as an organized list, not as a single text block.
 
     **Social Media Benchmarks (Saudi F&B):**
-    - Instagram Engagement Rate: 3-5% is healthy
-    - TikTok Engagement Rate: 4%+ is excellent
+    - انستقرام / Instagram Engagement Rate: 3-5% is healthy
+    - تيك توك / TikTok Engagement Rate: 4%+ is excellent
     - Review Response Time Target: <24 hours
     - Share to Impression Ratio: 1%+ indicates viral potential
 
@@ -53,6 +54,10 @@ export const digitalExpertAgent = new Agent({
 
     **Bullet Points:**
     When the section has multiple key findings, use the \`bulletPoints\` array field.
+
+    **Narrative Rules:**
+    - Maximum 5 short paragraphs. Do NOT repeat what is already in the conclusion or bulletPoints.
+    - Use a markdown table only if comparing platforms side by side and no chart covers it.
 
     **Output:**
     Your output must be a single JSON object adhering to the reportSectionSchema.

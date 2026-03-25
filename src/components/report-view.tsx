@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion } from "motion/react";
 import {
   TrendingUp,
@@ -23,6 +23,9 @@ import {
   ExternalLink,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
+  Zap,
+  ArrowLeft,
   type LucideIcon,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -38,6 +41,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
+import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 import type {
   ReportManifest,
@@ -57,7 +61,6 @@ import type {
 import { MessageResponse } from "@/components/ai-elements/message";
 import { DataBarChart } from "@/components/charts/bar-chart";
 import { DataPieChart } from "@/components/charts/pie-chart";
-import { ArrowLeft } from "lucide-react";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -70,6 +73,34 @@ function fmtK(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}م`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}ك`;
   return n.toLocaleString("ar-SA");
+}
+
+// ── Count-up hook ─────────────────────────────────────────────────────────────
+
+function useCountUp(target: number, duration = 900): number {
+  const [current, setCurrent] = useState(0);
+  const rafRef = useRef<number | null>(null);
+  const startRef = useRef<number | null>(null);
+  useEffect(() => {
+    startRef.current = null;
+    const animate = (timestamp: number) => {
+      if (!startRef.current) startRef.current = timestamp;
+      const elapsed = timestamp - startRef.current;
+      const progress = Math.min(elapsed / duration, 1);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setCurrent(Math.round(target * eased * 10) / 10);
+      if (progress < 1) rafRef.current = requestAnimationFrame(animate);
+    };
+    rafRef.current = requestAnimationFrame(animate);
+    return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
+  }, [target, duration]);
+  return current;
+}
+
+function AnimatedNumber({ value, isPercent }: { value: number; isPercent?: boolean }) {
+  const animated = useCountUp(value, 900);
+  if (isPercent) return <>{animated.toFixed(1)}</>;
+  return <>{Math.round(animated).toLocaleString("ar-SA")}</>;
 }
 
 // ── Tab icon map — fixed per section ID ──────────────────────────────────────
@@ -88,29 +119,19 @@ function TabIcon({ sectionId }: { sectionId: string }) {
   return <Icon className={cfg.className} />;
 }
 
-// ── Conclusion — subtle inline treatment ─────────────────────────────────────
+// ── Conclusion — ambient section intro ───────────────────────────────────────
 
 function ConclusionBadge({ conclusion }: { conclusion: ReportSection['conclusion'] }) {
   if (!conclusion) return null;
-  
-  // Use custom emoji if provided, otherwise use severity-based styling without icon
-  const emoji = conclusion.emoji;
-  
-  const severityStyles = {
-    success:  { bg: "bg-emerald-50 dark:bg-emerald-950/30", border: "border-emerald-200 dark:border-emerald-800", text: "text-emerald-700 dark:text-emerald-300" },
-    warning:  { bg: "bg-amber-50 dark:bg-amber-950/30", border: "border-amber-200 dark:border-amber-800", text: "text-amber-700 dark:text-amber-300" },
-    critical: { bg: "bg-red-50 dark:bg-red-950/30", border: "border-red-200 dark:border-red-800", text: "text-red-700 dark:text-red-300" },
-  };
-  
-  const style = severityStyles[conclusion.severity] || severityStyles.warning;
-  
   return (
-    <div className={cn("rounded-lg border p-4 mb-4", style.bg, style.border)}>
-      <div className="flex items-start gap-3">
-        {emoji && <span className="text-2xl">{emoji}</span>}
-        <p className={cn("leading-relaxed flex-1", style.text)}>{conclusion.text}</p>
-      </div>
-    </div>
+    <motion.div
+      className="mb-5"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.5 }}
+    >
+      <MessageResponse>{conclusion.text}</MessageResponse>
+    </motion.div>
   );
 }
 
@@ -119,14 +140,25 @@ function ConclusionBadge({ conclusion }: { conclusion: ReportSection['conclusion
 function Citations({ citations }: { citations?: string[] }) {
   if (!citations || citations.length === 0) return null;
   return (
-    <div className="mt-4 rounded-lg border bg-muted/30 p-3">
-      <p className="font-semibold text-muted-foreground mb-2">المصادر:</p>
-      <ul className="text-muted-foreground space-y-1">
-        {citations.map((cite, i) => (
-          <li key={i}>• {cite}</li>
-        ))}
-      </ul>
-    </div>
+    <Collapsible className="mt-4">
+      <CollapsibleTrigger className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors group">
+        <ChevronLeft className="size-3.5 transition-transform group-data-[state=open]:-rotate-90" />
+        المصادر ({citations.length})
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <ul className="mt-2 space-y-1.5 text-xs text-muted-foreground border-r-2 border-white/[0.06] pr-3">
+          {citations.map((cite, i) => (
+            <li key={i}>
+              {cite.startsWith('http') ? (
+                <a href={cite} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 hover:text-foreground break-all transition-colors">
+                  {cite}
+                </a>
+              ) : cite}
+            </li>
+          ))}
+        </ul>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }
 
@@ -224,7 +256,7 @@ function MenuBcgChart({ items, insight }: { items: CollectedFinancials['items'];
 function EngagementVsBenchmarkChart({ benchmarks, insight }: { benchmarks: CollectedData['socialAudit']['platformBenchmarks']; insight: string }) {
   if (benchmarks.length === 0) return null;
   const data = benchmarks.map(b => ({
-    label: b.platform === 'instagram' ? 'Instagram' : 'TikTok',
+    label: b.platform === 'instagram' ? 'انستقرام / Instagram' : 'تيك توك / TikTok',
     value: b.engagementRate,
     comparisonValue: b.benchmark,
   }));
@@ -282,47 +314,109 @@ function TopReviewTopicsChart({ topics, insight }: { topics: CollectedData['revi
   );
 }
 
-function RatingComparisonChart({ competitors, manifest, insight }: { competitors: CollectedCompetitor[]; manifest?: ReportManifest; insight: string }) {
+// ── Competitor Matrix Table ───────────────────────────────────────────────────
+
+const PRICE_LEVEL_LABELS: Record<string, string> = {
+  PRICE_LEVEL_FREE:           'مجاني',
+  PRICE_LEVEL_INEXPENSIVE:    'اقتصادي ﹩',
+  PRICE_LEVEL_MODERATE:       'متوسط ﹩﹩',
+  PRICE_LEVEL_EXPENSIVE:      'غالي ﹩﹩﹩',
+  PRICE_LEVEL_VERY_EXPENSIVE: 'فاخر ﹩﹩﹩﹩',
+};
+
+function CompetitorMatrixTable({ competitors, manifest, insight }: { competitors: CollectedCompetitor[]; manifest?: ReportManifest; insight: string }) {
   const businessName = manifest?.metadata?.displayName ?? manifest?.metadata?.businessName ?? 'مشروعك';
   const businessRating = manifest?.metadata?.rating;
-  const data: Array<{ label: string; value: number }> = [];
-  if (businessRating != null) data.push({ label: businessName, value: businessRating });
-  for (const c of competitors.slice(0, 6)) {
-    if (c.rating != null) data.push({ label: c.name, value: c.rating });
-  }
-  if (data.length === 0) return null;
-  const sorted = [...data].sort((a, b) => b.value - a.value);
-  return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-base">مقارنة التقييمات مع المنافسين</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <DataBarChart data={sorted} unit="★" highlightLabel={businessName} />
-        <ChartInsight insight={insight} />
-      </CardContent>
-    </Card>
-  );
-}
+  const businessReviews = manifest?.metadata?.reviewCount;
 
-function ReviewVolumeChart({ competitors, manifest, insight }: { competitors: CollectedCompetitor[]; manifest?: ReportManifest; insight: string }) {
-  const businessName = manifest?.metadata?.displayName ?? manifest?.metadata?.businessName ?? 'مشروعك';
-  const businessReviewCount = manifest?.metadata?.reviewCount;
-  const data: Array<{ label: string; value: number }> = [];
-  if (businessReviewCount != null) data.push({ label: businessName, value: businessReviewCount });
-  for (const c of competitors.slice(0, 6)) {
-    if (c.reviewCount != null) data.push({ label: c.name, value: c.reviewCount });
-  }
-  if (data.length === 0) return null;
-  const sorted = [...data].sort((a, b) => b.value - a.value);
+  // Build target business row
+  const targetWeight = (businessReviews ?? 0) * (businessRating ?? 0);
+  const competitorWeightSum = competitors.reduce((sum, c) => sum + (c.reviewCount ?? 0) * (c.rating ?? 0), 0);
+  const totalWeight = targetWeight + competitorWeightSum;
+  const targetShare = totalWeight > 0 ? (targetWeight / totalWeight) * 100 : null;
+
+  // All rows: target business first, then competitors sorted by localMarketShare desc
+  type MatrixRow = { name: string; rating?: number; reviewCount?: number; marketShare?: number; priceLevel?: string; photoUrl?: string; isTarget: boolean };
+  const rows: MatrixRow[] = [
+    { name: businessName, rating: businessRating, reviewCount: businessReviews, marketShare: targetShare ?? undefined, isTarget: true },
+    ...[...competitors].sort((a, b) => (b.localMarketShare ?? 0) - (a.localMarketShare ?? 0)).map(c => ({
+      name: c.name,
+      rating: c.rating,
+      reviewCount: c.reviewCount,
+      marketShare: c.localMarketShare,
+      priceLevel: c.priceLevel,
+      photoUrl: c.photoUrl,
+      isTarget: false,
+    })),
+  ];
+
+  if (rows.length <= 1 && !businessRating) return null;
+
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-base">حجم التقييمات مقارنة بالمنافسين</CardTitle>
+        <CardTitle className="text-base">مصفوفة المنافسين</CardTitle>
       </CardHeader>
-      <CardContent>
-        <DataBarChart data={sorted} valueLabel="عدد التقييمات" highlightLabel={businessName} />
-        <ChartInsight insight={insight} />
+      <CardContent className="p-0">
+        <Table dir="rtl">
+          <TableHeader>
+            <TableRow>
+              <TableHead className="text-right w-12">صورة</TableHead>
+              <TableHead className="text-right">الاسم</TableHead>
+              <TableHead className="text-right">التقييم</TableHead>
+              <TableHead className="text-right">المراجعات</TableHead>
+              <TableHead className="text-right">حصة السمعة</TableHead>
+              <TableHead className="text-right">السعر</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.map((row, i) => (
+              <TableRow key={i} className={row.isTarget ? "border-r-2 border-r-primary bg-primary/[0.04]" : ""}>
+                <TableCell>
+                  {row.photoUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={row.photoUrl} alt="" className="w-10 h-10 rounded-md object-cover" />
+                  ) : (
+                    <div className="w-10 h-10 rounded-md bg-muted/50 flex items-center justify-center">
+                      <Globe className="size-4 text-muted-foreground/50" />
+                    </div>
+                  )}
+                </TableCell>
+                <TableCell className={cn("font-medium", row.isTarget && "text-primary")}>
+                  {row.name}
+                  {row.isTarget && <span className="mr-1.5 text-[10px] text-primary/70 font-normal">← أنت</span>}
+                </TableCell>
+                <TableCell>
+                  {row.rating != null ? (
+                    <span className="flex items-center gap-1 tabular-nums">
+                      <Star className="size-3 fill-yellow-400 text-yellow-400" />
+                      {row.rating.toFixed(1)}
+                    </span>
+                  ) : '—'}
+                </TableCell>
+                <TableCell className="tabular-nums text-muted-foreground">
+                  {row.reviewCount != null ? row.reviewCount.toLocaleString('ar-SA') : '—'}
+                </TableCell>
+                <TableCell>
+                  {row.marketShare != null ? (
+                    <span className={cn(
+                      "tabular-nums font-medium",
+                      row.isTarget ? "text-primary" : row.marketShare > 15 ? "text-emerald-500" : row.marketShare > 8 ? "text-amber-500" : "text-muted-foreground"
+                    )}>
+                      {row.marketShare.toFixed(1)}%
+                    </span>
+                  ) : '—'}
+                </TableCell>
+                <TableCell className="text-muted-foreground text-xs">
+                  {row.priceLevel ? (PRICE_LEVEL_LABELS[row.priceLevel] ?? row.priceLevel) : '—'}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+        <div className="px-4 py-2.5 border-t">
+          <ChartInsight insight={insight} />
+        </div>
       </CardContent>
     </Card>
   );
@@ -353,10 +447,8 @@ function ChartFromData({
       return <SentimentBreakdownChart themes={collectedData.semantic.themes} insight={chart.insight} />;
     case 'top-review-topics':
       return <TopReviewTopicsChart topics={collectedData.reviews.topics} insight={chart.insight} />;
-    case 'rating-comparison':
-      return <RatingComparisonChart competitors={collectedData.competitors} manifest={manifest} insight={chart.insight} />;
-    case 'review-volume':
-      return <ReviewVolumeChart competitors={collectedData.competitors} manifest={manifest} insight={chart.insight} />;
+    case 'competitor-matrix':
+      return <CompetitorMatrixTable competitors={collectedData.competitors} manifest={manifest} insight={chart.insight} />;
     default:
       return null;
   }
@@ -366,21 +458,52 @@ function ChartFromData({
 
 function ExpectedOutcomesRow({ outcomes }: { outcomes: ExpectedOutcome[] }) {
   return (
-    <div className="space-y-2">
-      <p className="font-semibold text-muted-foreground">النتائج المتوقعة</p>
+    <div className="space-y-3">
+      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground/60">النتائج المتوقعة</p>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {outcomes.map((o, i) => (
-          <Card key={i}>
-            <CardContent className="p-4 text-center">
-              <p className="text-muted-foreground leading-snug mb-2">{o.metric}</p>
-              <div className="flex items-center justify-center gap-2">
-                <span className="tabular-nums text-muted-foreground">{fmt(o.current, 1)} {o.unit}</span>
-                <ArrowLeft className="size-3.5 text-muted-foreground shrink-0" />
-                <span className="tabular-nums font-bold text-primary">{fmt(o.target, 1)} {o.unit}</span>
+        {outcomes.map((o, i) => {
+          const isIncrease = o.target > o.current;
+          const delta = o.current > 0 ? ((o.target - o.current) / o.current * 100) : 0;
+          const progressPct = o.target > 0 ? Math.min((o.current / o.target) * 100, 100) : 0;
+          return (
+            <motion.div
+              key={i}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.35, delay: i * 0.07 }}
+              className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-4 space-y-3"
+            >
+              <p className="text-xs text-muted-foreground leading-snug">{o.metric}</p>
+              <div>
+                <p className="text-2xl font-bold tabular-nums text-primary">
+                  <AnimatedNumber value={o.target} isPercent={o.unit === '%'} />
+                  <span className="text-sm font-medium text-muted-foreground mr-1">{o.unit}</span>
+                </p>
+                <p className="text-xs text-muted-foreground tabular-nums mt-0.5">
+                  من {fmt(o.current, 1)} {o.unit}
+                </p>
               </div>
-            </CardContent>
-          </Card>
-        ))}
+              <div className="space-y-1">
+                <div className="h-1 w-full rounded-full bg-white/[0.06] overflow-hidden">
+                  <motion.div
+                    className="h-full rounded-full bg-primary"
+                    initial={{ width: "0%" }}
+                    animate={{ width: `${progressPct}%` }}
+                    transition={{ duration: 0.9, delay: 0.2 + i * 0.07, ease: "easeOut" }}
+                  />
+                </div>
+                <div className="flex justify-end">
+                  <span className={cn(
+                    "text-[10px] font-semibold tabular-nums",
+                    isIncrease ? "text-emerald-400" : "text-rose-400"
+                  )}>
+                    {isIncrease ? "+" : ""}{delta.toFixed(0)}%
+                  </span>
+                </div>
+              </div>
+            </motion.div>
+          );
+        })}
       </div>
     </div>
   );
@@ -390,30 +513,119 @@ function ExpectedOutcomesRow({ outcomes }: { outcomes: ExpectedOutcome[] }) {
 
 const PHASE_PALETTE = [
   {
-    dot:        'bg-rose-500',
-    line:       'bg-rose-200 dark:bg-rose-900/40',
-    headerBg:   'bg-rose-50/60 dark:bg-rose-950/10',
-    taskBorder: 'border-rose-200 dark:border-rose-900/50',
-    badge:      'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300',
-    stepNum:    'bg-rose-100 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400',
+    color:      "#f43f5e",
+    glow:       "rgba(244,63,94,0.18)",
+    dotCls:     "bg-rose-500",
+    badge:      "bg-rose-500/10 text-rose-400 border border-rose-500/20",
+    stepNum:    "bg-rose-500/10 text-rose-400",
+    taskBorder: "border-r-rose-500/40",
+    accentBg:   "bg-rose-500/[0.04]",
+    accentBorder: "border-rose-500/20",
   },
   {
-    dot:        'bg-amber-500',
-    line:       'bg-amber-200 dark:bg-amber-900/40',
-    headerBg:   'bg-amber-50/60 dark:bg-amber-950/10',
-    taskBorder: 'border-amber-200 dark:border-amber-900/50',
-    badge:      'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300',
-    stepNum:    'bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400',
+    color:      "#f59e0b",
+    glow:       "rgba(245,158,11,0.18)",
+    dotCls:     "bg-amber-500",
+    badge:      "bg-amber-500/10 text-amber-400 border border-amber-500/20",
+    stepNum:    "bg-amber-500/10 text-amber-400",
+    taskBorder: "border-r-amber-500/40",
+    accentBg:   "bg-amber-500/[0.04]",
+    accentBorder: "border-amber-500/20",
   },
   {
-    dot:        'bg-emerald-500',
-    line:       'bg-emerald-200 dark:bg-emerald-900/40',
-    headerBg:   'bg-emerald-50/60 dark:bg-emerald-950/10',
-    taskBorder: 'border-emerald-200 dark:border-emerald-900/50',
-    badge:      'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300',
-    stepNum:    'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400',
+    color:      "#10b981",
+    glow:       "rgba(16,185,129,0.18)",
+    dotCls:     "bg-emerald-500",
+    badge:      "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20",
+    stepNum:    "bg-emerald-500/10 text-emerald-400",
+    taskBorder: "border-r-emerald-500/40",
+    accentBg:   "bg-emerald-500/[0.04]",
+    accentBorder: "border-emerald-500/20",
   },
 ];
+
+// ── Impact config ─────────────────────────────────────────────────────────────
+
+const IMPACT_CFG = {
+  high:   { label: "تأثير عالٍ",    cls: "bg-rose-500/10 text-rose-400 border border-rose-500/20" },
+  medium: { label: "تأثير متوسط",  cls: "bg-amber-500/10 text-amber-400 border border-amber-500/20" },
+  low:    { label: "تأثير منخفض", cls: "bg-blue-500/10 text-blue-400 border border-blue-500/20" },
+} as const;
+
+// ── Quick Wins ─────────────────────────────────────────────────────────────────
+
+function QuickWinsSection({ moves }: { moves: NonNullable<ReportSection["tacticalMoves"]> }) {
+  if (moves.length === 0) return null;
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2">
+        <Zap className="size-3.5 text-amber-400" />
+        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground/60">تحركات سريعة</p>
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        {moves.map((move, i) => {
+          const cfg = IMPACT_CFG[move.impact] ?? IMPACT_CFG.medium;
+          return (
+            <motion.div
+              key={i}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3, delay: i * 0.06 }}
+              className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-3 flex flex-col gap-2.5"
+            >
+              <p className="text-sm leading-snug">{move.action}</p>
+              <div className="flex items-center justify-between gap-2 mt-auto">
+                <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold", cfg.cls)}>
+                  {cfg.label}
+                </span>
+                <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                  <Clock className="size-3" />
+                  {move.deadline}
+                </span>
+              </div>
+            </motion.div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── Strengths & Risks ──────────────────────────────────────────────────────────
+
+function StrengthsRisksRow({ strengths, risks }: { strengths?: string[]; risks?: string[] }) {
+  if ((!strengths || strengths.length === 0) && (!risks || risks.length === 0)) return null;
+  return (
+    <div className="grid gap-3 sm:grid-cols-2">
+      {(strengths?.length ?? 0) > 0 && (
+        <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/[0.04] p-4 space-y-2">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-400/70">نقاط القوة</p>
+          <ul className="space-y-1.5">
+            {strengths!.map((s, i) => (
+              <li key={i} className="flex items-start gap-2">
+                <CheckCircle2 className="size-3.5 text-emerald-400 mt-0.5 shrink-0" />
+                <span className="text-sm text-foreground/80 leading-snug">{s}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {(risks?.length ?? 0) > 0 && (
+        <div className="rounded-xl border border-rose-500/20 bg-rose-500/[0.04] p-4 space-y-2">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-rose-400/70">المخاطر</p>
+          <ul className="space-y-1.5">
+            {risks!.map((r, i) => (
+              <li key={i} className="flex items-start gap-2">
+                <AlertTriangle className="size-3.5 text-rose-400 mt-0.5 shrink-0" />
+                <span className="text-sm text-foreground/80 leading-snug">{r}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
 
 type ParsedNarrative = {
   goal: string;
@@ -451,67 +663,130 @@ function ActionPlanContent({ section }: { section: ReportSection }) {
 
   if (hasStructuredPhases) {
     return (
-      <div className="space-y-5" dir="rtl">
-        <ConclusionBadge conclusion={section.conclusion} />
+      <div className="space-y-6" dir="rtl">
+        {section.narrative && <NarrativeBlock markdown={section.narrative} />}
+
+        <StrengthsRisksRow strengths={section.keyStrengths} risks={section.keyRisks} />
 
         {(section.expectedOutcomes?.length ?? 0) > 0 && (
           <ExpectedOutcomesRow outcomes={section.expectedOutcomes!} />
         )}
 
-        <div className="space-y-4">
+        {(section.tacticalMoves?.length ?? 0) > 0 && (
+          <QuickWinsSection moves={section.tacticalMoves!} />
+        )}
+
+        {/* Phase timeline */}
+        <div className="space-y-0">
           {section.phases!.map((phase, phaseIdx) => {
             const pal = PHASE_PALETTE[phaseIdx % PHASE_PALETTE.length];
+            const totalTasks = phase.tasks.length;
+            const isLast = phaseIdx === section.phases!.length - 1;
             return (
               <motion.div
                 key={phaseIdx}
-                initial={{ opacity: 0, y: 8 }}
+                initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3, delay: phaseIdx * 0.08 }}
+                transition={{ duration: 0.35, delay: phaseIdx * 0.1 }}
               >
-                <Card className="gap-0 py-0 overflow-hidden">
-                  <CardHeader className={cn("border-b py-3 px-4", pal.headerBg)}>
-                    <div className="flex items-center gap-2">
-                      <div className={cn("size-5 rounded-full flex items-center justify-center shrink-0", pal.dot)}>
-                        <span className="text-[10px] font-bold text-white">{phaseIdx + 1}</span>
-                      </div>
-                      <CardTitle className="font-semibold leading-snug">{phase.title}</CardTitle>
-                    </div>
-                    <div className={cn("rounded-full px-2.5 py-0.5 text-xs font-medium w-fit", pal.badge)}>
-                      {phase.goal}
-                    </div>
-                  </CardHeader>
+                {/* Row: number circle + card */}
+                <div className="flex gap-4 items-stretch">
 
-                  <CardContent className="p-0 divide-y divide-border">
-                    {phase.tasks.map((task, taskIdx) => (
-                      <div key={taskIdx} className={cn("px-4 py-3 border-r-2", pal.taskBorder)}>
-                        <div className="flex items-center justify-between gap-3 mb-3">
-                          <span className="font-semibold">{task.title}</span>
-                          <span className={cn(
-                            "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium",
-                            pal.badge
-                          )}>
-                            <Clock className="size-3" />
-                            {task.duration}
-                          </span>
+                  {/* Left column: circle + bridge */}
+                  <div className="flex flex-col items-center shrink-0" style={{ width: 28 }}>
+                    {/* Glowing phase number circle */}
+                    <motion.div
+                      className={cn(
+                        "size-7 rounded-full flex items-center justify-center shrink-0 text-[11px] font-bold text-white z-10",
+                        pal.dotCls
+                      )}
+                      style={{ boxShadow: `0 0 12px ${pal.glow}, 0 0 24px ${pal.glow}` }}
+                      initial={{ scale: 0.6, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      transition={{ duration: 0.4, delay: phaseIdx * 0.1 + 0.1, ease: [0.22, 1, 0.36, 1] }}
+                    >
+                      {String(phaseIdx + 1).padStart(2, "0")}
+                    </motion.div>
+
+                    {/* Bridge line between phases */}
+                    {!isLast && (
+                      <motion.div
+                        className="w-px grow mt-1"
+                        style={{
+                          background: `linear-gradient(to bottom, ${pal.color}, ${PHASE_PALETTE[(phaseIdx + 1) % PHASE_PALETTE.length].color})`,
+                          opacity: 0.25,
+                        }}
+                        initial={{ scaleY: 0, originY: 0 }}
+                        animate={{ scaleY: 1 }}
+                        transition={{ duration: 0.5, delay: phaseIdx * 0.1 + 0.3 }}
+                      />
+                    )}
+                  </div>
+
+                  {/* Right column: card + bottom gap */}
+                  <div className={cn("flex-1 min-w-0", !isLast && "mb-3")}>
+                    <div
+                      className="rounded-2xl border border-white/[0.06] bg-white/[0.03] overflow-hidden"
+                      style={{ boxShadow: `0 0 0 1px ${pal.glow}` }}
+                    >
+                      {/* Phase header */}
+                      <div className={cn("px-5 py-4 border-b border-white/[0.06]", pal.accentBg)}>
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="space-y-1 flex-1">
+                            <h3 className="font-semibold text-foreground leading-snug">{phase.title}</h3>
+                            {phase.goal && (
+                              <p className="text-sm text-foreground/60 leading-relaxed">{phase.goal}</p>
+                            )}
+                          </div>
+                          <span className="shrink-0 text-xs text-muted-foreground/50 mt-0.5">{totalTasks} مهام</span>
                         </div>
-                        <p className="text-muted-foreground mb-1.5">الخطوات</p>
-                        <ol className="space-y-1.5">
-                          {task.steps.map((step, stepIdx) => (
-                            <li key={stepIdx} className="flex items-start gap-2">
-                              <span className={cn(
-                                "mt-0.5 size-4 rounded-full flex items-center justify-center shrink-0 text-[10px] font-bold",
-                                pal.stepNum
-                              )}>
-                                {stepIdx + 1}
-                              </span>
-                              <p className="text-muted-foreground leading-snug">{step.text}</p>
-                            </li>
-                          ))}
-                        </ol>
                       </div>
-                    ))}
-                  </CardContent>
-                </Card>
+
+                      {/* Tasks */}
+                      <div className="divide-y divide-white/[0.04]">
+                        {phase.tasks.map((task, taskIdx) => (
+                          <Collapsible key={taskIdx} defaultOpen={taskIdx === 0} className="group/task">
+                            <CollapsibleTrigger className={cn(
+                              "w-full flex items-center justify-between gap-3 px-5 py-3.5 text-right transition-colors hover:bg-white/[0.02]",
+                              "border-r-2", pal.taskBorder
+                            )}>
+                              <span className="font-medium text-sm leading-snug">{task.title}</span>
+                              <div className="flex items-center gap-2 shrink-0">
+                                <span className={cn(
+                                  "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold",
+                                  pal.badge
+                                )}>
+                                  <Clock className="size-2.5" />
+                                  {task.duration}
+                                </span>
+                                <ChevronDown className="size-3.5 text-muted-foreground/50 transition-transform duration-200 group-data-[state=open]/task:rotate-180" />
+                              </div>
+                            </CollapsibleTrigger>
+                            <CollapsibleContent>
+                              <div className={cn("px-5 pb-4 pt-1 border-r-2", pal.taskBorder)}>
+                                <p className="text-xs text-muted-foreground/60 mb-2 uppercase tracking-wider">الخطوات</p>
+                                <ol className="space-y-2">
+                                  {task.steps.map((step, stepIdx) => (
+                                    <li key={stepIdx} className="flex items-start gap-2.5">
+                                      <span className={cn(
+                                        "mt-0.5 size-4 rounded-full flex items-center justify-center shrink-0 text-[10px] font-bold",
+                                        pal.stepNum
+                                      )}>
+                                        {stepIdx + 1}
+                                      </span>
+                                      <p className="text-sm text-muted-foreground leading-snug">{step.text}</p>
+                                    </li>
+                                  ))}
+                                </ol>
+                              </div>
+                            </CollapsibleContent>
+                          </Collapsible>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                </div>
               </motion.div>
             );
           })}
@@ -635,11 +910,25 @@ function SectionContent({
 
 function DataSectionHeading({ label }: { label: string }) {
   return (
-    <div className="flex items-center gap-3 mb-4">
-      <Separator className="flex-1" />
-      <span className="text-muted-foreground shrink-0">{label}</span>
-      <Separator className="flex-1" />
-    </div>
+    <motion.div
+      className="flex items-center gap-3 mb-4"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.5 }}
+    >
+      <div className="flex-1 h-px bg-gradient-to-r from-transparent via-primary/30 to-primary/10" />
+      <span
+        className="shrink-0 flex items-center gap-1.5 text-xs font-semibold px-3 py-1 rounded-full border border-primary/20 bg-primary/5 text-primary/70"
+        style={{ boxShadow: "0 0 12px rgba(46,91,255,0.15)" }}
+      >
+        <span className="tracking-wide">{label}</span>
+        <span className="font-black tracking-[0.18em] text-primary">CBO.AI</span>
+        <span className="flex items-center justify-center size-4 rounded-[3px] border border-primary/30 bg-primary/15">
+          <TrendingUp className="size-2.5 text-primary" />
+        </span>
+      </span>
+      <div className="flex-1 h-px bg-gradient-to-l from-transparent via-primary/30 to-primary/10" />
+    </motion.div>
   );
 }
 
@@ -695,8 +984,11 @@ function FinancialDataSection({ financials }: { financials: CollectedFinancials 
       {/* KPI row */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {kpis.map((kpi, i) => (
-          <div
+          <motion.div
             key={i}
+            initial={{ opacity: 0, y: 14 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35, delay: i * 0.07, ease: "easeOut" }}
             className={cn(
               "rounded-lg border bg-background p-3 text-center",
               kpi.highlight && "border-red-200 bg-red-50/50 dark:border-red-800/40 dark:bg-red-950/10",
@@ -709,9 +1001,9 @@ function FinancialDataSection({ financials }: { financials: CollectedFinancials 
               kpi.highlight && "text-red-600 dark:text-red-400",
               kpi.positive && "text-emerald-600 dark:text-emerald-400",
             )}>
-              {fmt(kpi.value, kpi.unit === '%' ? 1 : 0)} {kpi.unit}
+              <AnimatedNumber value={kpi.value} isPercent={kpi.unit === '%'} /> {kpi.unit}
             </p>
-          </div>
+          </motion.div>
         ))}
       </div>
 
@@ -740,17 +1032,23 @@ function FinancialDataSection({ financials }: { financials: CollectedFinancials 
         </div>
         {financials.netRevenue > 0 && (
           <div className="flex rounded-full overflow-hidden h-2">
-            <div
+            <motion.div
               className="bg-emerald-500"
-              style={{ width: `${safeCogsPct}%` }}
+              initial={{ width: "0%" }}
+              animate={{ width: `${safeCogsPct}%` }}
+              transition={{ duration: 0.8, delay: 0.1, ease: "easeOut" }}
             />
-            <div
+            <motion.div
               className="bg-blue-500"
-              style={{ width: `${safeLaborPct}%` }}
+              initial={{ width: "0%" }}
+              animate={{ width: `${safeLaborPct}%` }}
+              transition={{ duration: 0.8, delay: 0.2, ease: "easeOut" }}
             />
-            <div
+            <motion.div
               className="bg-slate-200 dark:bg-slate-800"
-              style={{ width: `${safeRemainingPct}%` }}
+              initial={{ width: "0%" }}
+              animate={{ width: `${safeRemainingPct}%` }}
+              transition={{ duration: 0.8, delay: 0.3, ease: "easeOut" }}
             />
           </div>
         )}
@@ -908,6 +1206,9 @@ function SocialProfileCard({ profile }: { profile: CollectedSocialProfile }) {
                   : <span className="text-xs font-bold text-slate-500 dark:text-slate-400">TT</span>
                 }
                 <p className="font-semibold leading-tight">@{profile.username}</p>
+                <span className="text-[10px] text-muted-foreground/70 font-normal">
+                  {isInstagram ? 'انستقرام / Instagram' : 'تيك توك / TikTok'}
+                </span>
                 {profile.isVerified && (
                   <span className="text-blue-500 text-xs">✓</span>
                 )}
@@ -1023,12 +1324,29 @@ function SentimentSection({ semantic }: { semantic: CollectedSemantic }) {
       <div className="flex gap-3 flex-wrap">
         <div className={cn("rounded-lg border p-4 flex items-center gap-4 flex-1 min-w-fit", scoreBg)}>
           <div className="text-center">
-            <p className={cn("text-4xl font-bold tabular-nums", scoreColor)}>{score}</p>
+            <motion.p
+              className={cn("text-4xl font-bold tabular-nums", scoreColor)}
+              initial={{ opacity: 0, scale: 0.85 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+            >
+              <AnimatedNumber value={score} />
+            </motion.p>
             <p className={cn("font-medium", scoreColor)}>{sentimentLabel}</p>
           </div>
           <div className="flex-1">
             <p className="text-muted-foreground mb-1.5">مزاج العملاء</p>
-            <Progress value={score} className="h-2" />
+            <div className="relative h-2 w-full overflow-hidden rounded-full bg-muted">
+              <motion.div
+                className={cn(
+                  "h-full rounded-full",
+                  score >= 70 ? "bg-emerald-500" : score >= 40 ? "bg-amber-500" : "bg-red-500"
+                )}
+                initial={{ width: "0%" }}
+                animate={{ width: `${score}%` }}
+                transition={{ duration: 0.9, delay: 0.25, ease: "easeOut" }}
+              />
+            </div>
             <p className="text-muted-foreground mt-1">من 100</p>
           </div>
         </div>
@@ -1072,7 +1390,13 @@ function ReviewSamples({ reviews }: { reviews: CollectedReviews }) {
   return (
     <div className="space-y-3">
       {reviews.samples.map((review, i) => (
-        <div key={i} className="rounded-lg border bg-background p-3 space-y-1.5">
+        <motion.div
+          key={i}
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, delay: i * 0.08, ease: "easeOut" }}
+          className="rounded-lg border bg-background p-3 space-y-1.5"
+        >
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <StarRating rating={review.rating} />
@@ -1102,7 +1426,7 @@ function ReviewSamples({ reviews }: { reviews: CollectedReviews }) {
               )}
             </div>
           )}
-        </div>
+        </motion.div>
       ))}
     </div>
   );
@@ -1144,7 +1468,7 @@ function DigitalDataSection({
                 }[bench.status];
                 return (
                   <div key={i} className="rounded-lg border bg-background px-3 py-2 flex items-center justify-between gap-3">
-                    <span className="font-medium capitalize">{bench.platform === 'instagram' ? 'Instagram' : 'TikTok'}</span>
+                    <span className="font-medium">{bench.platform === 'instagram' ? 'انستقرام / Instagram' : 'تيك توك / TikTok'}</span>
                     <div className="flex items-center gap-3">
                       <span className="text-muted-foreground tabular-nums">
                         تفاعل {bench.engagementRate.toFixed(2)}% · معيار {bench.benchmark.toFixed(2)}%
@@ -1177,7 +1501,7 @@ function DigitalDataSection({
   );
 }
 
-// ── Market: Competitor Table + Review Cards ───────────────────────────────────
+// ── Market: Market Summary + Competitor Review Cards ──────────────────────────
 
 function MarketDataSection({
   competitors,
@@ -1221,7 +1545,7 @@ function MarketDataSection({
           <CardContent className="pt-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">حصة السوق المحلية</p>
+                <p className="text-sm text-muted-foreground">حصة السوق (السمعة)</p>
                 <p className="text-2xl font-bold">{marketData.localMarketShare?.toFixed(1) ?? '—'}%</p>
               </div>
               <div className="text-left rtl:text-right">
@@ -1415,9 +1739,82 @@ function SectionWithData({
         <div>{collectedContent}</div>
       )}
       {collectedContent && (
-        <DataSectionHeading label="تحليل الذكاء الاصطناعي" />
+        <DataSectionHeading label="تحليل" />
       )}
       <SectionContent section={section} collectedData={collectedData} manifest={manifest} />
+    </div>
+  );
+}
+
+// ── Section navigation ────────────────────────────────────────────────────────
+
+function SectionNav({
+  prev,
+  next,
+  onNavigate,
+  accent,
+}: {
+  prev?: { id: string; title: string };
+  next?: { id: string; title: string };
+  onNavigate: (id: string) => void;
+  accent: Record<string, string>;
+}) {
+  return (
+    <div className="grid grid-cols-2 gap-3 mt-12 mb-2" dir="rtl">
+
+      {/* Previous — right column in RTL, muted */}
+      {prev ? (
+        <motion.button
+          onClick={() => onNavigate(prev.id)}
+          whileHover={{ y: -3 }}
+          transition={{ duration: 0.2, ease: "easeOut" }}
+          className="group flex items-center gap-3 rounded-2xl border border-white/[0.06] bg-white/[0.02] px-5 py-4 text-right hover:bg-white/[0.04] hover:border-white/[0.10] transition-colors"
+        >
+          <ChevronRight className="size-4 text-muted-foreground/30 shrink-0 group-hover:text-muted-foreground/60 transition-colors" />
+          <div className="flex-1 min-w-0">
+            <p className="text-[10px] text-muted-foreground/40 uppercase tracking-[0.2em] mb-1">السابق</p>
+            <div className="flex items-center gap-1.5">
+              <TabIcon sectionId={prev.id} />
+              <p className="text-sm font-medium text-muted-foreground group-hover:text-foreground transition-colors truncate">{prev.title}</p>
+            </div>
+          </div>
+        </motion.button>
+      ) : <div />}
+
+      {/* Next — left column in RTL, accented */}
+      {next ? (
+        <motion.button
+          onClick={() => onNavigate(next.id)}
+          whileHover={{ y: -3 }}
+          transition={{ duration: 0.2, ease: "easeOut" }}
+          className="group flex items-center gap-3 rounded-2xl border px-5 py-4 text-right transition-all"
+          style={{
+            borderColor: `${accent[next.id] ?? "#6b7280"}28`,
+            backgroundColor: `${accent[next.id] ?? "#6b7280"}05`,
+          }}
+          onMouseEnter={e => {
+            (e.currentTarget as HTMLElement).style.borderColor = `${accent[next.id] ?? "#6b7280"}50`;
+            (e.currentTarget as HTMLElement).style.backgroundColor = `${accent[next.id] ?? "#6b7280"}0d`;
+          }}
+          onMouseLeave={e => {
+            (e.currentTarget as HTMLElement).style.borderColor = `${accent[next.id] ?? "#6b7280"}28`;
+            (e.currentTarget as HTMLElement).style.backgroundColor = `${accent[next.id] ?? "#6b7280"}05`;
+          }}
+        >
+          <div className="flex-1 min-w-0">
+            <p className="text-[10px] text-muted-foreground/40 uppercase tracking-[0.2em] mb-1 text-left">التالي</p>
+            <div className="flex items-center gap-1.5 justify-end">
+              <p className="text-sm font-semibold text-foreground/80 group-hover:text-foreground transition-colors truncate">{next.title}</p>
+              <TabIcon sectionId={next.id} />
+            </div>
+          </div>
+          <ChevronLeft
+            className="size-4 shrink-0 transition-transform group-hover:-translate-x-0.5"
+            style={{ color: accent[next.id] ?? "#6b7280" }}
+          />
+        </motion.button>
+      ) : <div />}
+
     </div>
   );
 }
@@ -1448,96 +1845,194 @@ export function ReportView({
 
   const tabSections = sections.filter(s => s.id !== 'action-plan');
   const actionPlan = sections.find(s => s.id === 'action-plan');
+  const [activeTab, setActiveTab] = useState(() => tabSections[0]?.id ?? "");
+
+  // Per-section accent color for the sliding indicator
+  const SECTION_ACCENT: Record<string, string> = {
+    financials:    "#10b981",
+    digital:       "#3b82f6",
+    market:        "#f97316",
+    "action-plan": "#2E5BFF",
+  };
+
+  // Ordered tab list for prev/next navigation
+  const orderedTabs = [
+    ...tabSections,
+    ...(actionPlan ? [actionPlan] : []),
+  ];
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
-      <Tabs defaultValue={tabSections[0]?.id} className="flex flex-1 flex-col overflow-hidden">
-        <div className="px-4 py-2">
-          <TabsList className="w-full justify-start h-auto flex-wrap">
-            {tabSections.map((section) => (
-              <TabsTrigger key={section.id} value={section.id} className="gap-2">
-                <TabIcon sectionId={section.id} />
-                {section.title}
-              </TabsTrigger>
-            ))}
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-1 flex-col overflow-hidden">
+
+        {/* ── Tab bar ──────────────────────────────────────────────────────── */}
+        <div className="px-2 py-1.5 flex-shrink-0">
+          <TabsList className=" w-full justify-start gap-0 bg-transparent rounded-none">
+
+            {/* Data tabs */}
+            {tabSections.map((section) => {
+              const isActive = activeTab === section.id;
+              const accent = SECTION_ACCENT[section.id] ?? "#6b7280";
+              return (
+                <TabsTrigger
+                  key={section.id}
+                  value={section.id}
+                  className={cn(
+                    "relative h-11 rounded-none border-0 bg-transparent px-4 gap-2 text-sm transition-colors",
+                    "data-[state=active]:bg-transparent data-[state=active]:shadow-none",
+                    isActive ? "text-foreground" : "text-muted-foreground hover:text-foreground/70"
+                  )}
+                >
+                  <TabIcon sectionId={section.id} />
+                  {section.title}
+                  {isActive && (
+                    <motion.div
+                      layoutId="tab-indicator"
+                      className="absolute bottom-0 left-0 right-0 h-0.5 rounded-full"
+                      style={{ backgroundColor: accent }}
+                      transition={{ type: "tween", stiffness: 380, damping: 40 }}
+                    />
+                  )}
+                </TabsTrigger>
+              );
+            })}
+
+            {/* Separator before action plan */}
             {actionPlan && (
-              <TabsTrigger value={actionPlan.id} className="gap-2">
+              <div className="mx-3 self-center h-4 w-px bg-white/[0.08]" />
+            )}
+
+            {/* Action plan — primary accent, visually distinct */}
+            {actionPlan && (
+              <TabsTrigger
+                value={actionPlan.id}
+                className={cn(
+                  "relative h-11 rounded-none border-0 bg-transparent px-4 gap-2 text-sm transition-colors",
+                  "data-[state=active]:bg-transparent data-[state=active]:shadow-none",
+                  activeTab === actionPlan.id ? "text-primary" : "text-muted-foreground hover:text-primary/70"
+                )}
+              >
                 <TabIcon sectionId="action-plan" />
                 {actionPlan.title}
+                {activeTab === actionPlan.id && (
+                  <motion.div
+                    layoutId="tab-indicator"
+                    className="absolute bottom-0 left-0 right-0 h-0.5 rounded-full bg-primary"
+                    transition={{ type: "spring", stiffness: 380, damping: 30 }}
+                  />
+                )}
               </TabsTrigger>
             )}
-            <TabsTrigger value="performance" className="gap-2">
+
+            {/* Performance — locked / coming soon */}
+            <TabsTrigger
+              value="performance"
+              disabled
+              className="relative h-11 rounded-none border-0 bg-transparent px-4 gap-2 text-sm text-muted-foreground/30 data-[state=active]:bg-transparent data-[state=active]:shadow-none cursor-not-allowed"
+            >
               <TabIcon sectionId="performance" />
               مراقبة الأداء
+              <span className="text-[9px] font-bold tracking-widest bg-white/[0.05] border border-white/[0.07] px-1.5 py-0.5 rounded-full">
+                قريباً
+              </span>
             </TabsTrigger>
+
           </TabsList>
         </div>
 
-        <div className="flex-1 overflow-y-auto report-scroll">
-          <div className="mx-auto max-w-4xl px-6 py-6">
-            {tabSections.map((section) => {
-              let collectedContent: React.ReactNode = undefined;
+        {/* ── Per-tab scroll contexts ───────────────────────────────────────── */}
+        <div className="flex-1 overflow-hidden">
 
-              if (section.id === 'financials' && collectedData?.financials) {
-                collectedContent = <FinancialDataSection financials={collectedData.financials} />;
-              } else if (section.id === 'digital' && collectedData) {
-                collectedContent = (
-                  <DigitalDataSection
-                    socialProfiles={collectedData.socialProfiles}
-                    semantic={collectedData.semantic}
-                    reviews={collectedData.reviews}
-                    socialAudit={collectedData.socialAudit}
-                  />
-                );
-              } else if (section.id === 'market' && collectedData) {
-                collectedContent = (
-                  <MarketDataSection
-                    competitors={collectedData.competitors}
-                    competitorReviews={collectedData.competitorReviews}
-                    marketData={collectedData.marketData}
-                  />
-                );
-              }
+          {tabSections.map((section) => {
+            let collectedContent: React.ReactNode = undefined;
 
-              return (
-                <TabsContent key={section.id} value={section.id} className="mt-0 py-6">
+            if (section.id === 'financials' && collectedData?.financials) {
+              collectedContent = <FinancialDataSection financials={collectedData.financials} />;
+            } else if (section.id === 'digital' && collectedData) {
+              collectedContent = (
+                <DigitalDataSection
+                  socialProfiles={collectedData.socialProfiles}
+                  semantic={collectedData.semantic}
+                  reviews={collectedData.reviews}
+                  socialAudit={collectedData.socialAudit}
+                />
+              );
+            } else if (section.id === 'market' && collectedData) {
+              collectedContent = (
+                <MarketDataSection
+                  competitors={collectedData.competitors}
+                  competitorReviews={collectedData.competitorReviews}
+                  marketData={collectedData.marketData}
+                />
+              );
+            }
+
+            const idx = orderedTabs.findIndex(t => t.id === section.id);
+            const prev = idx > 0 ? orderedTabs[idx - 1] : undefined;
+            const next = idx < orderedTabs.length - 1 ? orderedTabs[idx + 1] : undefined;
+
+            return (
+              <TabsContent key={section.id} value={section.id} className="mt-0 h-full overflow-y-auto report-scroll">
+                <div className="mx-auto max-w-4xl px-6 py-6">
                   <motion.div
                     initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.3 }}
                   >
                     <SectionWithData section={section} collectedContent={collectedContent} collectedData={collectedData} manifest={manifest} />
+                    <SectionNav prev={prev} next={next} onNavigate={setActiveTab} accent={SECTION_ACCENT} />
                   </motion.div>
-                </TabsContent>
-              );
-            })}
-
-            {actionPlan && (
-              <TabsContent value={actionPlan.id} className="mt-0">
-                <motion.div
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.3 }}
-                >
-                  <ActionPlanContent section={actionPlan} />
-                </motion.div>
+                </div>
               </TabsContent>
-            )}
+            );
+          })}
 
-            <TabsContent value="performance" className="mt-0">
+          {actionPlan && (() => {
+            const idx = orderedTabs.findIndex(t => t.id === actionPlan.id);
+            const prev = idx > 0 ? orderedTabs[idx - 1] : undefined;
+            return (
+              <TabsContent value={actionPlan.id} className="mt-0 h-full overflow-y-auto report-scroll">
+                <div className="mx-auto max-w-4xl px-6 py-6">
+                  <motion.div
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3 }}
+                  >
+                    <ActionPlanContent section={actionPlan} />
+                    <SectionNav prev={prev} next={undefined} onNavigate={setActiveTab} accent={SECTION_ACCENT} />
+                  </motion.div>
+                </div>
+              </TabsContent>
+            );
+          })()}
+
+          <TabsContent value="performance" className="mt-0 h-full">
+            <motion.div
+              className="flex h-full flex-col items-center justify-center gap-5 text-center"
+              dir="rtl"
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3 }}
+            >
               <motion.div
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3 }}
-                className="flex flex-col items-center justify-center py-24 text-center"
-                dir="rtl"
+                className="flex size-16 items-center justify-center rounded-2xl border border-white/[0.07] bg-white/[0.03]"
+                animate={{ opacity: [0.4, 0.7, 0.4] }}
+                transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
               >
-                <Activity className="size-10 mb-4 text-muted-foreground/40" />
-                <p className="font-medium text-muted-foreground">مراقبة الأداء</p>
-                <p className="text-muted-foreground/60 mt-1">قريباً</p>
+                <Activity className="size-7 text-muted-foreground/40" />
               </motion.div>
-            </TabsContent>
-          </div>
+              <div className="space-y-2">
+                <p className="font-semibold text-muted-foreground/60">مراقبة الأداء</p>
+                <p className="text-sm text-muted-foreground/40 max-w-xs leading-relaxed">
+                  تتبع مؤشراتك الرئيسية بشكل مستمر مقارنةً بالأهداف والمنافسين
+                </p>
+                <span className="inline-block mt-1 text-xs font-bold tracking-widest bg-white/[0.04] border border-white/[0.07] px-3 py-1 rounded-full text-muted-foreground/30">
+                  قريباً
+                </span>
+              </div>
+            </motion.div>
+          </TabsContent>
+
         </div>
       </Tabs>
     </div>

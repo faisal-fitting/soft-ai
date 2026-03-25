@@ -3,8 +3,7 @@
 import { Suspense, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "motion/react";
-import { Loader2 } from "lucide-react";
-import { ReportSession } from "@/components/report-session";
+import { ReportSession, CboLoader } from "@/components/report-session";
 
 function DashboardContent() {
   const params = useParams();
@@ -33,8 +32,8 @@ export default function ReportPage() {
   return (
     <Suspense
       fallback={
-        <div className="flex h-screen items-center justify-center bg-background">
-          <Loader2 className="size-6 animate-spin text-muted-foreground" />
+        <div className="flex h-screen bg-background">
+          <CboLoader />
         </div>
       }
     >

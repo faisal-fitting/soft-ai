@@ -25,7 +25,8 @@ export const getPlaceDetails = createTool({
         'X-Goog-FieldMask':
           'id,displayName,rating,userRatingCount,location,formattedAddress,' +
           'types,primaryType,internationalPhoneNumber,nationalPhoneNumber,websiteUri,' +
-          'regularOpeningHours,priceLevel,photos',
+          'regularOpeningHours,priceLevel,photos,' +
+          'dineIn,takeout,delivery,servesBreakfast,servesCoffee',
       },
     };
 

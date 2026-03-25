@@ -5,9 +5,35 @@ import { useRouter } from "next/navigation";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import { motion, AnimatePresence } from "motion/react";
-import { Loader2, XCircle } from "lucide-react";
+import { XCircle } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 import { getWorkflowRun, getCollectedData, saveThreadTitle } from "@/app/actions";
+
+// ── Branded loader ─────────────────────────────────────────────────────────────
+export function CboLoader() {
+  return (
+    <div className="flex flex-1 h-full items-center justify-center flex-col gap-4 bg-background">
+      <div className="relative size-12">
+        {/* Pulsing outer ring */}
+        <motion.div
+          className="absolute inset-0 rounded-sm border-2 border-primary/30"
+          animate={{ scale: [1, 1.5, 1], opacity: [0.5, 0, 0.5] }}
+          transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+        />
+        {/* Inner square — CBO logo mark language */}
+        <div className="absolute inset-2 rounded-[2px] bg-primary/15 border border-primary/30" />
+        {/* Rotating arc */}
+        <motion.div
+          className="absolute inset-0 rounded-sm border-2 border-transparent border-t-primary"
+          animate={{ rotate: 360 }}
+          transition={{ duration: 1.2, repeat: Infinity, ease: "linear" }}
+        />
+      </div>
+      <p className="text-xs text-muted-foreground tracking-[0.25em] uppercase font-medium">CBO</p>
+    </div>
+  );
+}
 import { useReportStore } from "@/store/report-store";
 import { BusinessSidebar } from "@/components/business-sidebar";
 import { ChatSidebar } from "@/components/chat-sidebar";
@@ -39,6 +65,8 @@ export function ReportSession({ sessionKey, urlRunId }: Props) {
 
   const pendingFormData = useRef<FinancialFormData | null>(null);
   const pendingThreadId = useRef<string | null>(null);
+  const firstReveal = useRef(false);
+  const [showRevealFlash, setShowRevealFlash] = useState(false);
 
   // ── Workflow transport ──────────────────────────────────────────────────────
   const workflowTransport = useMemo(
@@ -169,7 +197,7 @@ export function ReportSession({ sessionKey, urlRunId }: Props) {
         if (restoredManifest) {
           setManifest(restoredManifest);
           setCollectedData(restoredCollected);
-          store.startReport(urlRunId, store.threadId ?? "", store.businessName ?? "");
+          store.startReport(urlRunId, store.threadId ?? urlRunId, store.businessName ?? "");
         } else if (status === "running") {
           // Workflow is still running - will reconnect via observe stream
           setIsObservingRunning(true);
@@ -194,36 +222,52 @@ export function ReportSession({ sessionKey, urlRunId }: Props) {
   // Don't show error while workflow is still running - it might complete successfully
   const showError = restoreError && !workflowRunning;
 
+  // Detect first-time manifest reveal for cinematic flash
+  useEffect(() => {
+    if (manifest && !firstReveal.current) {
+      firstReveal.current = true;
+      setShowRevealFlash(true);
+      const t = setTimeout(() => setShowRevealFlash(false), 1200);
+      return () => clearTimeout(t);
+    }
+  }, [manifest]);
+
   if (loadingHistory) {
-    return (
-      <div className="flex flex-1 items-center justify-center">
-        <Loader2 className="size-6 animate-spin text-muted-foreground" />
-      </div>
-    );
+    return <CboLoader />;
   }
 
   if (showError) {
     return (
-      <div className="flex flex-1 flex-col items-center justify-center gap-3 px-8 text-center" dir="rtl">
-        <div className="flex size-14 items-center justify-center rounded-full border-2 border-red-200 bg-red-50 dark:border-red-800/40 dark:bg-red-950/20">
+      <motion.div
+        className="flex flex-1 flex-col items-center justify-center gap-3 px-8 text-center"
+        dir="rtl"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, ease: "easeOut" }}
+      >
+        <motion.div
+          className="flex size-14 items-center justify-center rounded-full border-2 border-red-200 bg-red-50 dark:border-red-800/40 dark:bg-red-950/20"
+          animate={{ boxShadow: ["0 0 0px rgba(239,68,68,0)", "0 0 18px rgba(239,68,68,0.25)", "0 0 0px rgba(239,68,68,0)"] }}
+          transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
+        >
           <XCircle className="size-7 text-red-500" />
-        </div>
+        </motion.div>
         <h2 className="text-lg font-bold">لم يتم العثور على التقرير</h2>
         <p className="text-sm text-muted-foreground max-w-sm">
           لا يوجد تقرير بالمعرّف{" "}
           <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">{restoreError}</code>
         </p>
-        <button
+        <Button
+          className="mt-2"
           onClick={() => {
             setRestoreError(null);
             store.reset();
             router.replace("/");
           }}
-          className="mt-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
         >
           إنشاء تقرير جديد
-        </button>
-      </div>
+        </Button>
+      </motion.div>
     );
   }
 
@@ -243,12 +287,26 @@ export function ReportSession({ sessionKey, urlRunId }: Props) {
   return (
     <SidebarProvider
       defaultOpen={hasReport}
-      style={{ "--sidebar-width": "16rem" } as React.CSSProperties}
+      style={{ "--sidebar-width": "20rem" } as React.CSSProperties}
       className="min-h-0 overflow-hidden"
     >
       <BusinessSidebar manifest={manifest} isGenerating={workflowRunning} collectedData={collectedData} />
 
-      <SidebarInset className="overflow-hidden">
+      <SidebarInset className="relative overflow-hidden">
+        {/* Cinematic reveal flash — fires once when report first appears */}
+        <AnimatePresence>
+          {showRevealFlash && (
+            <motion.div
+              className="pointer-events-none absolute inset-0 z-20"
+              style={{ background: "linear-gradient(to bottom, rgba(3,75,255,0.1) 0%, transparent 60%)" }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: [0, 1, 0] }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 1.0, times: [0, 0.2, 1], ease: "easeOut" }}
+            />
+          )}
+        </AnimatePresence>
+
         <AnimatePresence mode="wait">
           {showProgress ? (
             <motion.div
@@ -268,10 +326,10 @@ export function ReportSession({ sessionKey, urlRunId }: Props) {
             <motion.div
               key={`report-${sessionKey}`}
               className="flex flex-1 overflow-hidden"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
+              initial={{ opacity: 0, scale: 0.98, y: 24 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0 }}
-              transition={{ duration: 0.4, ease: "easeOut" }}
+              transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
             >
               <ReportView
                 manifest={manifest ?? undefined}
@@ -284,7 +342,7 @@ export function ReportSession({ sessionKey, urlRunId }: Props) {
         </AnimatePresence>
       </SidebarInset>
 
-      <ChatSidebar businessName={businessName} hasReport={hasReport} />
+      {hasReport && <ChatSidebar businessName={businessName} />}
     </SidebarProvider>
   );
 }

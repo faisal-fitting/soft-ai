@@ -117,12 +117,15 @@ export const cboAgent = new Agent({
     **Bullet Points:**
     When the section has multiple key findings to address, use the \`bulletPoints\` array field.
 
+    **Business Style:**
+    Tailor ALL recommendations to the business style (e.g., takeaway cafe vs dine-in, cloud kitchen vs fine dining). A takeaway cafe needs different operational and marketing advice than a sit-down restaurant. Use the business style context provided in the prompt.
+
     **Output:**
     JSON object adhering to reportSectionSchema:
     - id: "action-plan"
     - title: "${ARABIC_SECTION_TITLES['action-plan']}" (FIXED)
     - conclusion: Overall execution priority with Arabic summary (2-3 sentences)
-    - narrative: Arabic executive summary of the overall plan
+    - narrative: Arabic executive summary — maximum 3-4 sentences. The structured phases carry the detail; the narrative is a brief framing only. Do NOT repeat what is in the phases or conclusions.
     - phases: Structured 3-phase plan organized by business pillars
     - keyStrengths: Top 3 refined strengths (Arabic, one-line each)
     - keyRisks: Top 3 refined risks/weaknesses (Arabic, one-line each)

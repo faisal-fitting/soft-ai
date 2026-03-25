@@ -47,10 +47,9 @@ function isReportRequest(msg: UIMessage): boolean {
 
 interface Props {
   businessName: string | null;
-  hasReport: boolean;
 }
 
-export function ChatSidebar({ businessName, hasReport }: Props) {
+export function ChatSidebar({ businessName }: Props) {
   const store = useReportStore();
   const threadId = store.threadId;
   const [loadingHistory, setLoadingHistory] = useState(true);
@@ -88,7 +87,8 @@ export function ChatSidebar({ businessName, hasReport }: Props) {
   }, [threadId, setMessages]);
 
   const isGenerating = status === "submitted" || status === "streaming";
-  const disabled = !hasReport || loadingHistory;
+  const missingThread = !threadId;
+  const disabled = loadingHistory || missingThread;
   const [input, setInput] = useState("");
   const displayMessages = messages.filter((m) => !isReportRequest(m));
 
@@ -102,23 +102,47 @@ export function ChatSidebar({ businessName, hasReport }: Props) {
       dir="rtl"
       collapsible="none"
       style={{ "--sidebar-width": "20rem" } as React.CSSProperties}
-      className="bg-transparent border-s-0 border-r"
+      className="border-r border-white/[0.06] bg-[#050505]"
     >
-      <SidebarHeader className="px-4 py-3">
-        <p className="text-sm font-semibold">المحادثة</p>
+      <SidebarHeader className="border-b border-white/[0.06] px-4 py-3.5">
+        <div className="flex items-center gap-2.5">
+          <div className="flex size-6 items-center justify-center rounded-md border border-primary/25 bg-primary/10">
+            <MessageSquare className="size-3.5 text-primary" />
+          </div>
+          <div>
+            <p className="text-xs font-bold tracking-[0.15em] uppercase text-foreground">
+              المحادثة
+            </p>
+            {businessName && (
+              <p className="text-[10px] text-muted-foreground truncate max-w-[160px]">
+                {businessName}
+              </p>
+            )}
+          </div>
+        </div>
       </SidebarHeader>
 
       <div className="relative flex flex-1 flex-col min-h-0">
-        {disabled && (
+        {missingThread ? (
           <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-background/70 backdrop-blur-[2px]">
-            <MessageSquare className="size-8 text-muted-foreground/40" />
-            <p className="text-sm text-muted-foreground text-center px-6 leading-relaxed">
-              ستتمكن من المحادثة
-              <br />
-              بعد إنشاء التقرير
+            <MessageSquare className="size-7 text-muted-foreground/40" />
+            <p className="text-xs text-muted-foreground text-center px-6 leading-relaxed">
+              لا يمكن تحميل المحادثة — معرّف الجلسة مفقود
             </p>
           </div>
-        )}
+        ) : loadingHistory ? (
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-background/70 backdrop-blur-[2px]">
+            <motion.div
+              animate={{ opacity: [0.3, 0.6, 0.3] }}
+              transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+            >
+              <MessageSquare className="size-7 text-primary/60" />
+            </motion.div>
+            <p className="text-xs text-muted-foreground text-center px-6 leading-relaxed">
+              جارٍ تحميل المحادثة…
+            </p>
+          </div>
+        ) : null}
 
         <SidebarContent className="p-0">
           <Conversation className="flex-1">
@@ -163,12 +187,25 @@ export function ChatSidebar({ businessName, hasReport }: Props) {
                 )}
               </AnimatePresence>
 
-              {!isGenerating && hasReport && (
-                <div className="flex flex-wrap gap-2">
-                  <Suggestion suggestion="ما هي أهم التوصيات؟" onClick={handleSend} />
-                  <Suggestion suggestion="تحليل المنافسين بالتفصيل" onClick={handleSend} />
-                  <Suggestion suggestion="كيف أحسن هامش الربح؟" onClick={handleSend} />
-                </div>
+              {!isGenerating && (
+                <motion.div
+                  className="flex flex-col gap-1.5"
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3 }}
+                >
+                  {["ما هي أهم التوصيات؟", "تحليل المنافسين بالتفصيل", "كيف أحسن هامش الربح؟"].map(
+                    (suggestion) => (
+                      <button
+                        key={suggestion}
+                        onClick={() => handleSend(suggestion)}
+                        className="w-full rounded-lg border border-white/[0.07] bg-white/[0.03] px-3 py-2 text-right text-xs text-muted-foreground transition-all hover:border-primary/30 hover:bg-primary/[0.06] hover:text-foreground"
+                      >
+                        {suggestion}
+                      </button>
+                    )
+                  )}
+                </motion.div>
               )}
             </ConversationContent>
             <ConversationScrollButton />

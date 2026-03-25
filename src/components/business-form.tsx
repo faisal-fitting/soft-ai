@@ -150,6 +150,9 @@ export function BusinessForm({ onSubmit, isSubmitting }: { onSubmit: (data: Fina
   const [data, setData] = useState<FinancialFormData>(() => loadDraft() ?? DEFAULT_DATA);
   const [collapsed, setCollapsed] = useState<boolean[]>([]);
   const [costModes, setCostModes] = useState<Array<"detailed" | "total">>([]);
+  const [itemKeys, setItemKeys] = useState<string[]>(
+    () => (loadDraft()?.items ?? []).map(() => crypto.randomUUID())
+  );
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -180,9 +183,9 @@ export function BusinessForm({ onSubmit, isSubmitting }: { onSubmit: (data: Fina
   const updateField = (key: keyof FinancialFormData, value: any) => setData(d => ({ ...d, [key]: value }));
   const updateItem = (index: number, key: keyof MenuItemInput, value: any) => setData(d => ({ ...d, items: d.items.map((item, i) => i === index ? { ...item, [key]: value } : item) }));
 
-  const addItem = () => { setData(d => ({ ...d, items: [...d.items, newItem()] })); setCollapsed(c => [...c, false]); setCostModes(m => [...m, "total"]); };
-  const removeItem = (i: number) => { setData(d => ({ ...d, items: d.items.filter((_, idx) => idx !== i) })); setCollapsed(c => c.filter((_, idx) => idx !== i)); setCostModes(m => m.filter((_, idx) => idx !== i)); };
-  const duplicateItem = (i: number) => { setData(d => { const items = [...d.items]; items.splice(i + 1, 0, { ...items[i] }); return { ...d, items }; }); setCollapsed(c => { const n = [...c]; n.splice(i + 1, 0, c[i]); return n; }); setCostModes(m => { const n = [...m]; n.splice(i + 1, 0, m[i]); return n; }); };
+  const addItem = () => { setData(d => ({ ...d, items: [...d.items, newItem()] })); setCollapsed(c => [...c, false]); setCostModes(m => [...m, "total"]); setItemKeys(k => [...k, crypto.randomUUID()]); };
+  const removeItem = (i: number) => { setData(d => ({ ...d, items: d.items.filter((_, idx) => idx !== i) })); setCollapsed(c => c.filter((_, idx) => idx !== i)); setCostModes(m => m.filter((_, idx) => idx !== i)); setItemKeys(k => k.filter((_, idx) => idx !== i)); };
+  const duplicateItem = (i: number) => { setData(d => { const items = [...d.items]; items.splice(i + 1, 0, { ...items[i] }); return { ...d, items }; }); setCollapsed(c => { const n = [...c]; n.splice(i + 1, 0, c[i]); return n; }); setCostModes(m => { const n = [...m]; n.splice(i + 1, 0, m[i]); return n; }); setItemKeys(k => { const n = [...k]; n.splice(i + 1, 0, crypto.randomUUID()); return n; }); };
 
   const handleExcelImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]; if (!file) return;
@@ -204,6 +207,7 @@ export function BusinessForm({ onSubmit, isSubmitting }: { onSubmit: (data: Fina
     setData(d => ({ ...d, items: [...d.items, ...imported] }));
     setCollapsed(c => [...c, ...Array(imported.length).fill(true)]);
     setCostModes(m => [...m, ...Array(imported.length).fill("total")]);
+    setItemKeys(k => [...k, ...Array.from({ length: imported.length }, () => crypto.randomUUID())]);
     e.target.value = "";
   };
 
@@ -228,7 +232,30 @@ export function BusinessForm({ onSubmit, isSubmitting }: { onSubmit: (data: Fina
           {steps.map((s, i) => (
             <div key={s.id} className="flex items-center">
               <div className={cn("flex items-center gap-2 px-3 py-1 rounded-full transition-all", step === s.id ? "bg-primary text-primary-foreground" : step > s.id ? "bg-emerald-500/20 text-emerald-400" : "text-muted-foreground")}>
-                {step > s.id ? <CheckCircle2 className="size-4" /> : <span className="text-sm font-medium">{i + 1}</span>}
+                <AnimatePresence mode="wait" initial={false}>
+                  {step > s.id ? (
+                    <motion.span
+                      key="check"
+                      initial={{ scale: 0, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      exit={{ scale: 0, opacity: 0 }}
+                      transition={{ type: "spring", stiffness: 400, damping: 15 }}
+                    >
+                      <CheckCircle2 className="size-4" />
+                    </motion.span>
+                  ) : (
+                    <motion.span
+                      key={`num-${s.id}`}
+                      className="text-sm font-medium"
+                      initial={{ scale: 0, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      exit={{ scale: 0, opacity: 0 }}
+                      transition={{ duration: 0.2 }}
+                    >
+                      {i + 1}
+                    </motion.span>
+                  )}
+                </AnimatePresence>
                 <span className="text-sm font-medium">{s.label}</span>
               </div>
               {i < 2 && <div className={cn("w-8 h-0.5 mx-2", step > s.id ? "bg-emerald-500" : "bg-border")} />}
@@ -367,8 +394,17 @@ export function BusinessForm({ onSubmit, isSubmitting }: { onSubmit: (data: Fina
                   <span className="text-foreground font-mono">{totalItemsRevenue.toLocaleString("ar-SA")} ر.س</span>
                 </div>
               )}
+              <AnimatePresence initial={false}>
               {data.items.map((item, i) => (
-                <div key={i} className="pb-6 mb-6 border-b border-border/50 last:border-0">
+                <motion.div
+                  key={itemKeys[i]}
+                  layout
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, x: 24 }}
+                  transition={{ duration: 0.22, ease: "easeOut" }}
+                  className="pb-6 mb-6 border-b border-border/50 last:border-0"
+                >
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-3 flex-1">
                       <Input value={item.name} onChange={(e) => updateItem(i, "name", e.target.value)} placeholder="اسم المنتج" className="max-w-[200px] text-foreground placeholder:text-muted-foreground" />
@@ -437,8 +473,9 @@ export function BusinessForm({ onSubmit, isSubmitting }: { onSubmit: (data: Fina
                       </Field>
                     )}
                   </div>
-                </div>
+                </motion.div>
               ))}
+              </AnimatePresence>
               <div className="flex gap-2 pt-4">
                 <Button variant="outline" className="flex-1 border-dashed border-border" onClick={addItem}><PlusIcon className="size-4 ml-2" />إضافة منتج</Button>
                 <Button variant="outline" className="border-border" onClick={() => fileInputRef.current?.click()}><Upload className="size-4 ml-2" />استيراد</Button>

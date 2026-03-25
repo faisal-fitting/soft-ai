@@ -165,7 +165,7 @@ export const competitorAnalysisSchema = z.object({
 // ── Feature Extractor Schemas (For Supporting Agents) ──────────────────────
 
 export const semanticAnalysisOutputSchema = z.object({
-  sentimentScore: z.number().min(0).max(100).describe('Overall sentiment score 0-100, where 0=extremely negative, 50=neutral, 100=extremely positive'),
+  sentimentScore: z.number().describe('Overall sentiment score 0-100, where 0=extremely negative, 50=neutral, 100=extremely positive'),
   themes: z.array(z.object({
     topic: z.string().describe('Theme topic in Arabic, e.g. "جودة القهوة", "سرعة الخدمة"'),
     sentiment: z.enum(['positive', 'negative', 'neutral']).describe('Dominant sentiment for this theme'),
@@ -189,7 +189,7 @@ export const topContentSchema = z.object({
 });
 
 export const socialAuditOutputSchema = z.object({
-  healthScore: z.number().min(1).max(10).describe('Overall social media health score 1-10'),
+  healthScore: z.number().describe('Overall social media health score 1-10'),
   platformBenchmarks: z.array(z.object({
     platform: z.enum(['instagram', 'tiktok']).describe('Social media platform'),
     status: z.enum(['above-benchmark', 'at-benchmark', 'below-benchmark']).describe('Performance vs Saudi F&B benchmark'),
@@ -236,21 +236,22 @@ export const BILINGUAL_EXPERT_PERSONA = `
 Write in a friendly, casual Saudi Arabic tone. Think of it as talking to a cafe owner you know personally. Use simple everyday words. Occasionally add a light touch like "أخوي", "يا طويل العمر", or "والله". Keep it natural and warm, not stiff or corporate. Explain any technical terms in plain Arabic.
 `;
 
-// Compact format guide for rich markdown output
+// Bilingual platform names — always use these when referring to social platforms
+export const PLATFORM_NAMES: Record<string, string> = {
+  instagram: 'انستقرام / Instagram',
+  tiktok: 'تيك توك / TikTok',
+};
+
+// Narrative format guide — concise, no repetition, minimal markdown
 export const OUTPUT_FORMAT_GUIDE = `
-You are an expert at creating visually rich, highly engaging, and scannable Markdown content.
-When populating the \`narrative\` field in the JSON response, you MUST adhere to the following rules:
+When populating the \`narrative\` field in the JSON response, follow these rules strictly:
 
-1. **Rich Formatting**: Break up text into scannable chunks using headings (##, ###) and bold text (**text**).
-2. **Visual Elements**: Use Markdown tables to present data clearly. Simulate "stat cards" using blockquotes (>) combined with bold text.
-3. **Emojis**: Liberally use emojis to create visual anchors and make the text engaging (e.g., 📊, 📈, 📉, 🔥, 💡, ✨, 🚀).
-4. **JSON String Escaping**: Since the output must be valid JSON, NEVER output raw newlines. Use literal \\n for all line breaks.
-
-<examples>
-{
-  "narrative": "## 📊 خلاصة الوضع يا طويل العمر 🔥\\n\\nأخوي، الوضع الحالي فيه نقاط قوة وفيه أشياء لازم ن修正ها! 📈\\n\\n### ✨ اللي يحتاج اهتمامك:\\n\\n> 💡 **هامش الربح:** **8%** بس والله، والمعيار 23% 🔥\\n> 👥 **معدل التفاعل:** **1.02%** فقط، يحتاج يصير 3%\\n\\n### 📊 الأرقام على السريع:\\n\\n| البند | القيمة | الحالة |\\n|---------|--------|-----------|\\n| المبيعات | 53,200 | زين ⚖️ |\\n| التكاليف | 29,999 | عالية 🔥 |\\n\\nوالله إذا سوينا التعديلات هذي،鹊个项目 بيكون روووعه! 🚀"
-}
-</examples>
+1. **Concise:** Keep the narrative under 6 short paragraphs. Do NOT repeat data already stated in conclusion, bulletPoints, or charts.
+2. **Minimal markdown:** Use bold (**text**) for key metrics. Use headings (##) sparingly — only when the narrative covers 3+ distinct topics. Use blockquotes (>) for a single most-important stat card only.
+3. **Tables only when essential:** Use a markdown table ONLY for direct per-item comparisons that cannot be shown otherwise. Do NOT duplicate data the frontend already renders as a chart or structured card.
+4. **No menu engineering table:** The frontend renders BCG matrix data from structured fields — never produce a menu engineering markdown table.
+5. **Emojis:** Use 1-2 emojis max per narrative for visual anchoring. Do not sprinkle emojis throughout.
+6. **JSON escaping:** NEVER output raw newlines. Use literal \\n for all line breaks.
 `;
 
 // ── Action Plan Structured Schemas ───────────────────────────────────────────
@@ -280,8 +281,7 @@ export const chartDataSourceSchema = z.enum([
   'engagement-vs-benchmark',
   'sentiment-breakdown',
   'top-review-topics',
-  'rating-comparison',
-  'review-volume',
+  'competitor-matrix',
 ]);
 
 export const chartReferenceSchema = z.object({
@@ -306,10 +306,10 @@ export const reportSectionSchema = z.object({
   conclusion: z.object({
     text: z.string().describe('Conclusion summarizing the section finding (2-3 sentences max)'),
     severity: z.enum(['success', 'warning', 'critical']).describe('Traffic-light severity: success=healthy, warning=needs attention, critical=urgent'),
-    emoji: z.string().max(1).optional().describe('Single emoji as visual anchor. Use ONE only: ✅ for success, ⚠️ for warning, 🚨 for critical'),
+    emoji: z.string().optional().describe('Single emoji as visual anchor. Use ONE only: ✅ for success, ⚠️ for warning, 🚨 for critical'),
   }).describe('Section conclusion with severity indicator'),
   bulletPoints: z.array(z.string()).optional().describe('Structured bullet points for multi-point analysis. Use when section has multiple key findings to address.'),
-  charts: z.array(chartReferenceSchema).max(3).optional().describe('1-3 chart references — pick from the available dataSource options that best support your conclusion. The frontend renders it from real collected data.'),
+  charts: z.array(chartReferenceSchema).optional().describe('1-3 chart references — pick from the available dataSource options that best support your conclusion. The frontend renders it from real collected data.'),
   narrative: z.string().describe('Detailed Markdown narrative with analysis and key findings'),
   citations: z.array(z.string()).optional().describe('Source URLs or references used in the analysis'),
   tacticalMoves: z.array(z.object({
@@ -320,7 +320,7 @@ export const reportSectionSchema = z.object({
   keyStrengths: z.array(z.string()).optional().describe('2-3 domain-specific strengths discovered in this section (Arabic)'),
   keyRisks: z.array(z.string()).optional().describe('2-3 domain-specific risks or weaknesses discovered in this section (Arabic)'),
   phases: z.array(actionPlanPhaseSchema).optional().describe('Structured action plan phases — only populated for the action-plan section'),
-  expectedOutcomes: z.array(expectedOutcomeSchema).max(4).optional().describe('3-4 KPI targets showing current → target — only for the action-plan section'),
+  expectedOutcomes: z.array(expectedOutcomeSchema).optional().describe('3-4 KPI targets showing current → target — only for the action-plan section'),
 });
 
 export const strategicDirectiveSchema = z.object({
@@ -329,6 +329,7 @@ export const strategicDirectiveSchema = z.object({
     name: z.string().describe('Name of the single most important metric to improve'),
     value: z.number().describe('Current value of the north star metric'),
     target: z.number().describe('Target value to achieve'),
+    unit: z.string().describe('Unit for display: "%" for percentages, "SAR" for currency, "x" for multipliers, or empty string if dimensionless'),
     rationale: z.string().describe('Explanation of why this metric was chosen as the north star'),
   }).describe('The single metric that if improved would resolve the core business conflict'),
   focusAreas: z.object({

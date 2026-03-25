@@ -18,5 +18,5 @@ export const semanticAnalysisAgent = new Agent({
     **Output:**
     Your output MUST be a JSON object that adheres to the provided schema.
   `,
-  model: 'openrouter/x-ai/grok-4.1-fast',
+  model: 'openrouter/anthropic/claude-haiku-4.5',
 });

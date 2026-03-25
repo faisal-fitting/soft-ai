@@ -137,3 +137,16 @@ Frontend Updates
 - MarketDataSection: Page size 6, sorting by rating/reviews buttons
 - engagement-gauge.tsx: New component for engagement rate visualization
 All 16 points addressed. Ready for testing!
+
+
+when the workflow is done, the result are not immediately rendered. i have to refresh to view the result. this is the logs [store:setFormData] ObjectbusinessName: "فايل"[[Prototype]]: Object
+forward-logs-shared.ts:95 [store:startReport] ObjectbusinessName: "فايل"runId: "2f866b3a-1179-490d-811c-4abe02c4743b"threadId: "673db8cf-54da-4b8a-95a3-b7b023ff38d9"[[Prototype]]: Object
+forward-logs-shared.ts:95 [observe:onData] data-workflow
+forward-logs-shared.ts:95 [form:onData] data-workflow running
+forward-logs-shared.ts:95 [store:setFormData] Object
+forward-logs-shared.ts:95 [store:startReport] Object
+forward-logs-shared.ts:95 [observe:onData] data-workflow
+forward-logs-shared.ts:95 [form:onData] data-workflow success
+forward-logs-shared.ts:95 [store:setFormData] Object
+forward-logs-shared.ts:95 [store:startReport] Object
+forward-logs-shared.ts:95 [observe:onFinish]

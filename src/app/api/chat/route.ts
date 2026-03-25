@@ -34,13 +34,20 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   const { messages, threadId, resourceId, ...rest } = await req.json();
 
+  if (!threadId) {
+    return NextResponse.json(
+      { error: 'threadId is required' },
+      { status: 400 }
+    );
+  }
+
   const stream = await handleChatStream({
     mastra,
     agentId: 'cboAgent',
     params: {
       messages,
       ...rest,
-      ...(threadId && { memory: { thread: threadId, resource: resourceId ?? 'user', lastMessages: false } }),
+      memory: { thread: threadId, resource: resourceId ?? 'user' },
     },
   });
 

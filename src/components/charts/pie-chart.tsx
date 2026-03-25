@@ -52,7 +52,7 @@ export function DataPieChart({ data, unit }: Props) {
     <div>
       <ChartContainer
         config={config}
-        className="mx-auto aspect-square max-h-[220px] px-0"
+        className="mx-auto aspect-square max-h-[300px] px-0"
       >
         <PieChart>
           <ChartTooltip
@@ -72,7 +72,7 @@ export function DataPieChart({ data, unit }: Props) {
             nameKey="nameKey"
             cx="50%"
             cy="50%"
-            outerRadius={70}
+            outerRadius={100}
             labelLine={false}
             label={({ cx, cy, midAngle, outerRadius, payload }) => {
               const radius = outerRadius + 18;
@@ -85,7 +85,7 @@ export function DataPieChart({ data, unit }: Props) {
                   textAnchor={x > cx ? "start" : "end"}
                   dominantBaseline="central"
                   fontSize={11}
-                  fill="hsl(var(--foreground))"
+                  fill="var(--color-foreground)"
                 >
                   {payload.pct}
                 </text>

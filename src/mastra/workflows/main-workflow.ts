@@ -25,12 +25,24 @@ export const workflowInputSchema = financialInputSchema.extend({
 
 // ── Shared Schemas & Constants ────────────────────────────────────────────────
 
+const businessStyleSchema = z.object({
+  googleTypes: z.array(z.string()),
+  primaryType: z.string().nullable(),
+  priceLevel: z.string().nullable(),
+  hasDineIn: z.boolean().nullable(),
+  hasTakeout: z.boolean().nullable(),
+  hasDelivery: z.boolean().nullable(),
+  servesBreakfast: z.boolean().nullable(),
+  servesCoffee: z.boolean().nullable(),
+});
+
 const placeEnrichedSchema = financialOutputSchema.extend({
   placeDetails: placeDetailsSchema,
   lat: z.number().optional(),
   lon: z.number().optional(),
   includedTypes: z.array(z.string()),
   radius: z.number(),
+  businessStyle: businessStyleSchema.optional(),
 });
 
 const mergedExternalSchema = placeEnrichedSchema.extend({
@@ -129,7 +141,18 @@ const fetchPlaceDetails = createStep({
         },
       },
     });
-    return { ...inputData, placeDetails: result, lat, lon, includedTypes, radius };
+    // Extract business style signals from Google Places data
+    const businessStyle = {
+      googleTypes: result.types ?? [],
+      primaryType: result.primaryType ?? null,
+      priceLevel: result.priceLevel ?? null,
+      hasDineIn: result.dineIn ?? null,
+      hasTakeout: result.takeout ?? null,
+      hasDelivery: result.delivery ?? null,
+      servesBreakfast: result.servesBreakfast ?? null,
+      servesCoffee: result.servesCoffee ?? null,
+    };
+    return { ...inputData, placeDetails: result, lat, lon, includedTypes, radius, businessStyle };
   },
 });
 
@@ -382,7 +405,6 @@ const generateStrategicDirective = createStep({
     const prompt = `Analyze this business and set the strategic directive:\n${JSON.stringify(inputData)}`;
     
     const response = await agent.generate(prompt, {
-      prepareStep: () => ({ model: 'openrouter/google/gemini-3.1-pro-preview' }),
       // Always pass memory with threadId for ObservationalMemory
       memory: { thread: memoryThreadId, resource: 'user' },
       structuredOutput: {
@@ -390,7 +412,7 @@ const generateStrategicDirective = createStep({
         errorStrategy: 'fallback',
         fallbackValue: {
           theme: 'Business Health Assessment',
-          northStarMetric: { name: 'Net Profit Margin', value: 0, target: 15, rationale: 'Core profitability focus' },
+          northStarMetric: { name: 'Net Profit Margin', value: 0, target: 15, unit: '%', rationale: 'Core profitability focus' },
           focusAreas: { financial: 'Efficiency', digital: 'Reputation', market: 'Benchmarking' },
           overallStatus: 'WARNING' as const,
         },
@@ -408,6 +430,7 @@ const generateStrategicDirective = createStep({
           northStarName: directive.northStarMetric?.name,
           northStarValue: directive.northStarMetric?.value,
           northStarTarget: directive.northStarMetric?.target,
+          northStarUnit: directive.northStarMetric?.unit,
           overallStatus: directive.overallStatus,
           focusAreas: directive.focusAreas,
         },
@@ -561,38 +584,31 @@ ${inputData.directive.theme}
 - Google Rating: ${inputData.placeDetails?.rating ?? 'N/A'}
 - Total Reviews: ${inputData.placeDetails?.userRatingCount ?? 'N/A'}
 
-## Competitors with Revenue Estimates (Top 6 by market presence)
+## Competitors (Top 6 by market presence)
 ${toYaml(inputData.competitorReviews ?? [])}
 
-## Calculation Context:
-- Each competitor's estimated monthly revenue = rating × reviewCount × 1000 SAR
-- Target business local market share = targetRevenue / (targetRevenue + sum(allCompetitorRevenues)) × 100%
-- Reputation share = based on review sentiment and volume relative to competitors
+## Business Style Context
+${toYaml((inputData as any).businessStyle ?? {})}
+
+## Reputation-Based Market Share:
+- Weight = rating × reviewCount for each business
+- Market share = businessWeight / totalMarketWeight × 100%
+- Google Rating: ${inputData.placeDetails?.rating ?? 'N/A'} | Total Reviews: ${inputData.placeDetails?.userRatingCount ?? 'N/A'}
+- Do NOT use estimated revenue for market share in this section — revenue estimation belongs in the financials section.
 
 ## Task
 Analyze the market data and provide competitive insights.
-Focus on competitor positioning, pricing strategies, revenue estimates, and market opportunities.
+Focus on competitor positioning, pricing strategies, reputation-based market share, and market opportunities.
+Consider the business style (e.g., takeaway vs dine-in) when assessing competition.
 
 **Chart Selection:**
-Pick 1-2 charts from: "rating-comparison", "review-volume".
-For each, write a one-sentence Arabic insight explaining why it matters for this specific business.
+Use the "competitor-matrix" chart. Write a one-sentence Arabic insight explaining what it reveals.
 
 **IMPORTANT: Exclude any competitor from your analysis if they have 0 reviews AND 0 rating.**
 These are unverified or inactive listings, not real competitors.
 
-**REQUIRED: Unified Competitive Matrix Table**
-In your narrative, include a markdown table showing all key competitor data:
-
-| المنافس | التقييم | المراجعات | الإيراد المتوقع | نقاط القوة | نقاط الضعف |
-|---------|---------|----------|-----------------|-----------|-----------|
-| [الاسم] | 4.5 ⭐ | 150 | 675,000 SAR | قوة1، قوة2 | ضعف1 |
-
-Include photos when available. Sort by revenue estimate (highest first). Limit to 6 competitors.
-
 **Local Market Share Analysis:**
-Calculate and include:
-- Target business estimated market share percentage
-- How target compares to average competitor revenue`;
+Calculate and include reputation-based market share (rating × reviewCount weight) for the target business vs competitors.`;
     const response = await agent!.generate(prompt, {
       structuredOutput: {
         schema: reportSectionSchema,
@@ -639,6 +655,9 @@ const generateActionPlanSection = createStep({
 
 ## التوجه الاستراتيجي
 ${toYaml((inputData.base as any).directive)}
+
+## Business Style Context
+${toYaml((inputData.base as any).businessStyle ?? {})}
 
 ## نقاط القوة والضعف من المحللين المتخصصين
 
@@ -690,7 +709,7 @@ ${toYaml({ conclusion: inputData.market.conclusion, tacticalMoves: inputData.mar
     }
 
     const response = await agent.generate(prompt, {
-      prepareStep: () => ({ model: 'openrouter/google/gemini-3.1-pro-preview' }),
+      prepareStep: () => ({ model: 'openrouter/anthropic/claude-opus-4-6' }),
       // Always pass memory with threadId for ObservationalMemory
       memory: { thread: memoryThreadId, resource: 'user' },
       structuredOutput: {

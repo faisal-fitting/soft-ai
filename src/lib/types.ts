@@ -8,8 +8,7 @@ export type ChartDataSource =
   | "engagement-vs-benchmark"
   | "sentiment-breakdown"
   | "top-review-topics"
-  | "rating-comparison"
-  | "review-volume";
+  | "competitor-matrix";
 
 export type ChartReference = {
   dataSource: ChartDataSource;
@@ -86,6 +85,7 @@ export type ReportManifest = {
       name: string;
       value: number;
       target: number;
+      unit: string;
       rationale: string;
     };
     focusAreas: { financial: string; digital: string; market: string };
@@ -133,6 +133,7 @@ export type ProgressPreviewStrategy = {
   northStarName: string;
   northStarValue: number;
   northStarTarget: number;
+  northStarUnit?: string;
   overallStatus: "CRITICAL" | "WARNING" | "HEALTHY" | "EXCEPTIONAL";
   focusAreas: { financial: string; digital: string; market: string };
 };

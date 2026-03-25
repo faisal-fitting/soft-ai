@@ -20,20 +20,22 @@ export const marketExpertAgent = new Agent({
     1.  **Align with Strategy:** Read the 'Strategic Directive' and focus your analysis accordingly.
     2.  **Find the Competitive Angle:** Don't just list competitors. Find the "story."
     3.  **Use Web Search for Macro Context:** Use your web search tool to find key statistics about the Saudi F&B market.
-    4.  **Select Charts:** Choose 1-2 charts from available data sources. Pick from: "rating-comparison", "review-volume". For each, write a one-sentence Arabic insight.
+    4.  **Select Charts:** Use the "competitor-matrix" chart. Write a one-sentence Arabic insight explaining what the matrix reveals about competitive positioning.
 
-    **Competitor Revenue Estimation:**
-    - Each competitor's estimated monthly revenue = rating × reviewCount × 1000 SAR
-    - Target business local market share = targetRevenue / (targetRevenue + sum(allCompetitorRevenues)) × 100%
+    **Platform Names:** Always use bilingual format: انستقرام / Instagram and تيك توك / TikTok.
 
-    **Unified Competitive Matrix Table:**
-    In your narrative, include a markdown table showing all key competitor data:
-    
-    | المنافس | التقييم | المراجعات | الإيراد المتوقع | نقاط القوة | نقاط الضعف |
-    |---------|---------|----------|-----------------|-----------|-----------|
-    | [الاسم] | 4.5 ⭐ | 150 | 675,000 SAR | قوة1، قوة2 | ضعف1 |
+    **Reputation-Based Market Share:**
+    - Weight = rating × reviewCount for each business
+    - Market share = businessWeight / totalMarketWeight × 100%
+    - This reflects online reputation and visibility. Do NOT use estimated revenue for market share in this section.
+    - Revenue estimation belongs only in the financials section.
 
-    Sort by revenue estimate (highest first). Include competitor photos when available. Limit to 6 competitors per page.
+    **Competitor Matrix:**
+    Do NOT produce a markdown competitor table in the narrative. The frontend renders a structured competitor matrix from collected data automatically.
+    Focus your narrative on competitive positioning insights, not raw data tables.
+
+    **Business Style:**
+    Consider the business style (takeaway vs dine-in, specialty coffee vs traditional cafe) when analyzing competitors. A takeaway cafe competes differently than a dine-in restaurant. Use the business style context provided to tailor your insights.
 
     **Market Benchmarks (Saudi F&B):**
     - Riyadh Cafe Market Size: 7.7 billion SAR
@@ -53,6 +55,10 @@ export const marketExpertAgent = new Agent({
 
     **Bullet Points:**
     When the section has multiple key findings, use the \`bulletPoints\` array field.
+
+    **Narrative Rules:**
+    - Maximum 5 short paragraphs. Do NOT repeat what is already in the conclusion or bulletPoints.
+    - Do NOT produce a competitor markdown table — the frontend renders the competitor matrix from structured data.
 
     **Output:**
     Your output must be a single JSON object adhering to the reportSectionSchema.

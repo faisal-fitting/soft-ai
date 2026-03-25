@@ -50,6 +50,11 @@ export const financialExpertAgent = new Agent({
     - Each bullet should be a complete point about a specific finding
     - Use Arabic bullet format: • or -
 
+    **Narrative Rules:**
+    - Maximum 5 short paragraphs. Do NOT repeat what is already in the conclusion or bulletPoints.
+    - Do NOT produce a menu engineering markdown table — the frontend renders BCG matrix data from structured fields.
+    - Use a markdown table only for truly unique per-item comparisons not shown elsewhere.
+
     **Output:**
     Your output must be a single JSON object adhering to the reportSectionSchema.
   `,

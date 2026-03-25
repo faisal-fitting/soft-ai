@@ -147,6 +147,26 @@
 }
 
 @layer utilities {
+  /* ── Custom scrollbars — brand-aligned thin track ──────────────────────── */
+  ::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: oklch(1 0 0 / 10%);
+    border-radius: 9999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: oklch(0.6 0.22 265 / 45%);
+  }
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: oklch(1 0 0 / 10%) transparent;
+  }
+
   .no-spinner::-webkit-inner-spin-button,
   .no-spinner::-webkit-outer-spin-button {
     -webkit-appearance: none;
@@ -154,5 +174,11 @@
   }
   .no-spinner {
     -moz-appearance: textfield;
+  }
+
+  /* RTL markdown table alignment */
+  [dir="rtl"] table th,
+  [dir="rtl"] table td {
+    text-align: right;
   }
 }

@@ -226,16 +226,27 @@ export async function getCollectedData(runId: string): Promise<CollectedData | n
     // Calculate local market share for target business
     const localMarketShare = totalMarketWeight > 0 ? (targetWeight / totalMarketWeight) * 100 : 0;
 
-    // Build competitor list with photos and market share
+    // Build a lookup of pre-constructed photoUrls from competitorReviews step (more reliable)
+    const competitorReviewsRaw = (mergedStep.competitorReviews ?? []) as any[];
+    const photoUrlByName = new Map<string, string>(
+      competitorReviewsRaw
+        .filter((cr: any) => cr.photoUrl && cr.name)
+        .map((cr: any) => [cr.name as string, cr.photoUrl as string])
+    );
+
+    // Build competitor list with photos (prefer pre-built URL, fall back to raw Places photo)
     const competitors: CollectedData['competitors'] = competitorsData
       .map((c: any) => {
         const weight = (c.userRatingCount ?? 0) * (c.rating ?? 0);
         const share = totalMarketWeight > 0 ? (weight / totalMarketWeight) * 100 : 0;
-        const photoUrl = c.photos?.[0]?.name
-          ? `https://places.googleapis.com/v1/${c.photos[0].name}/media?maxHeightPx=150&key=${process.env.GOOGLE_PLACES_API_KEY ?? ''}`
-          : undefined;
+        const name = c.displayName?.text ?? c.id;
+        const photoUrl =
+          photoUrlByName.get(name) ??
+          (c.photos?.[0]?.name
+            ? `https://places.googleapis.com/v1/${c.photos[0].name}/media?maxHeightPx=150&key=${process.env.GOOGLE_PLACES_API_KEY ?? ''}`
+            : undefined);
         return {
-          name: c.displayName?.text ?? c.id,
+          name,
           rating: c.rating,
           reviewCount: c.userRatingCount,
           address: c.formattedAddress,
