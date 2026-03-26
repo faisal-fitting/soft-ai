@@ -32,7 +32,9 @@
       "Bash(pnpm list:*)",
       "Bash(gh search:*)",
       "Bash(npm view:*)",
-      "Bash(npx skills:*)"
+      "Bash(npx skills:*)",
+      "WebFetch(domain:www.mapcn.dev)",
+      "Bash(pnpm add:*)"
     ]
   }
 }
