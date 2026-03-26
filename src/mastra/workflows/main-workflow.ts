@@ -268,6 +268,10 @@ const fetchCompetitorReviews = createStep({
           estimatedMonthlyRevenue: calculateEstimatedRevenue(c.rating, c.userRatingCount),
           photoUrl,
           priceLevel: c.priceLevel ? parseInt(c.priceLevel.replace(/\D/g, '')) || 2 : 2,
+          lat: c.location?.latitude,
+          lon: c.location?.longitude,
+          types: c.types,
+          primaryType: c.primaryType,
           reviews: (data.reviews ?? []).slice(0, 10).map((r: any) => ({
             rating: r.rating,
             snippet: r.snippet ?? r.extracted_snippet?.original,
@@ -573,6 +577,16 @@ const generateMarketSection = createStep({
   execute: async ({ inputData, mastra, writer }) => {
     await writer?.write({ type: 'data-step-progress', data: { step: 'market', phase: 7, status: 'running', message: 'جاري تحليل السوق...' } });
     const agent = mastra?.getAgent('marketExpertAgent');
+    // Classify competitors for the prompt
+    const targetPrimaryType = (inputData as any).businessStyle?.primaryType;
+    const targetIncludedTypes = new Set<string>((inputData as any).includedTypes ?? []);
+    const competitorsWithCategory = (inputData.competitorReviews ?? []).map((c: any) => ({
+      ...c,
+      competitorCategory: (c.primaryType && (c.primaryType === targetPrimaryType || targetIncludedTypes.has(c.primaryType))) ? 'direct' : 'indirect',
+    }));
+    const directCompetitors = competitorsWithCategory.filter((c: any) => c.competitorCategory === 'direct');
+    const indirectCompetitors = competitorsWithCategory.filter((c: any) => c.competitorCategory === 'indirect');
+
     const prompt = `## Context
 You are a market research specialist for Saudi F&B businesses.
 
@@ -583,9 +597,13 @@ ${inputData.directive.theme}
 - Monthly Revenue: ${inputData.netRevenue?.toLocaleString() ?? 'N/A'} SAR
 - Google Rating: ${inputData.placeDetails?.rating ?? 'N/A'}
 - Total Reviews: ${inputData.placeDetails?.userRatingCount ?? 'N/A'}
+- Primary Type: ${targetPrimaryType ?? 'N/A'}
 
-## Competitors (Top 6 by market presence)
-${toYaml(inputData.competitorReviews ?? [])}
+## Direct Competitors (same business type — ${directCompetitors.length} found)
+${directCompetitors.length > 0 ? toYaml(directCompetitors) : 'None found'}
+
+## Indirect Competitors (different type, overlapping audience — ${indirectCompetitors.length} found)
+${indirectCompetitors.length > 0 ? toYaml(indirectCompetitors.map((c: any) => ({ name: c.name, rating: c.rating, reviewCount: c.reviewCount, primaryType: c.primaryType }))) : 'None'}
 
 ## Business Style Context
 ${toYaml((inputData as any).businessStyle ?? {})}
@@ -598,17 +616,17 @@ ${toYaml((inputData as any).businessStyle ?? {})}
 
 ## Task
 Analyze the market data and provide competitive insights.
-Focus on competitor positioning, pricing strategies, reputation-based market share, and market opportunities.
-Consider the business style (e.g., takeaway vs dine-in) when assessing competition.
+Focus on direct competitor positioning, pricing strategies, reputation-based market share, and market opportunities.
+Briefly mention indirect competitors as context for the overall market landscape (they compete for the same customers, even though they are a different business type).
 
 **Chart Selection:**
-Use the "competitor-matrix" chart. Write a one-sentence Arabic insight explaining what it reveals.
+Use the "competitor-matrix" chart (which shows ONLY direct competitors in the frontend). Write a one-sentence Arabic insight explaining what it reveals about direct competition.
 
 **IMPORTANT: Exclude any competitor from your analysis if they have 0 reviews AND 0 rating.**
 These are unverified or inactive listings, not real competitors.
 
 **Local Market Share Analysis:**
-Calculate and include reputation-based market share (rating × reviewCount weight) for the target business vs competitors.`;
+Calculate and include reputation-based market share (rating × reviewCount weight) for the target business vs direct competitors only.`;
     const response = await agent!.generate(prompt, {
       structuredOutput: {
         schema: reportSectionSchema,

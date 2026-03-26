@@ -25,7 +25,7 @@ export async function getWorkflowRun(runId: string): Promise<{ manifest: ReportM
     const state = await workflow.getWorkflowRunById(runId);
     console.log(`[getWorkflowRun] runId=${runId} status=${state?.status ?? 'not found'}`);
     if (!state) return { manifest: null, status: null };
-    if (state.status !== 'success') return { manifest: null, status: state.status };
+    if (state.status !== 'success' && state.status !== 'completed') return { manifest: null, status: state.status };
     const result = (state as any).result;
     const manifest = result?.metadata ? result : result?.result;
     return { manifest: manifest as ReportManifest ?? null, status: state.status };
@@ -226,6 +226,16 @@ export async function getCollectedData(runId: string): Promise<CollectedData | n
     // Calculate local market share for target business
     const localMarketShare = totalMarketWeight > 0 ? (targetWeight / totalMarketWeight) * 100 : 0;
 
+    // Classification helpers
+    const targetPrimaryType = mergedStep.businessStyle?.primaryType as string | null | undefined;
+    const targetIncludedTypes = new Set<string>((mergedStep.includedTypes ?? []) as string[]);
+    const classifyCompetitor = (primaryType: string | null | undefined): 'direct' | 'indirect' => {
+      if (primaryType && (primaryType === targetPrimaryType || targetIncludedTypes.has(primaryType))) {
+        return 'direct';
+      }
+      return 'indirect';
+    };
+
     // Build a lookup of pre-constructed photoUrls from competitorReviews step (more reliable)
     const competitorReviewsRaw = (mergedStep.competitorReviews ?? []) as any[];
     const photoUrlByName = new Map<string, string>(
@@ -253,6 +263,10 @@ export async function getCollectedData(runId: string): Promise<CollectedData | n
           priceLevel: c.priceLevel,
           photoUrl,
           localMarketShare: share,
+          lat: c.location?.latitude as number | undefined,
+          lon: c.location?.longitude as number | undefined,
+          primaryType: c.primaryType as string | undefined,
+          competitorCategory: classifyCompetitor(c.primaryType),
         };
       })
       .sort((a: any, b: any) => (b.rating ?? 0) - (a.rating ?? 0));
@@ -274,12 +288,19 @@ export async function getCollectedData(runId: string): Promise<CollectedData | n
         name: cr.name,
         rating: cr.rating,
         reviewCount: cr.reviewCount,
+        photoUrl: cr.photoUrl,
+        competitorCategory: classifyCompetitor(cr.primaryType),
         reviews: (cr.reviews ?? []).slice(0, 4).map((r: any) => ({
           rating: r.rating,
           snippet: r.snippet,
           date: r.date,
         })),
       }));
+
+    // ── Location ──────────────────────────────────────────────────────────────
+    const location: CollectedData['location'] = (mergedStep.lat != null && mergedStep.lon != null)
+      ? { lat: mergedStep.lat, lon: mergedStep.lon, radius: mergedStep.radius ?? 1000 }
+      : undefined;
 
     // ── Place Details ─────────────────────────────────────────────────────────
     const pd = mergedStep.placeDetails;
@@ -300,7 +321,7 @@ export async function getCollectedData(runId: string): Promise<CollectedData | n
       photoUrls,
     };
 
-    return { financials, reviews, socialProfiles, semantic, socialAudit, competitors, competitorReviews, placeDetails, marketData };
+    return { financials, reviews, socialProfiles, semantic, socialAudit, competitors, competitorReviews, placeDetails, marketData, location };
   } catch (err) {
     console.error(`[getCollectedData] failed for runId=${runId}:`, err);
     return null;

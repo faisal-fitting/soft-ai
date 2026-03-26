@@ -1,5 +1,11 @@
 "use client";
+import dynamic from "next/dynamic";
 import { useEffect, useRef, useState } from "react";
+
+const CompetitorMap = dynamic(
+  () => import("@/components/competitor-map").then(m => m.CompetitorMap),
+  { ssr: false }
+);
 import { motion } from "motion/react";
 import {
   TrendingUp,
@@ -329,9 +335,12 @@ function CompetitorMatrixTable({ competitors, manifest, insight }: { competitors
   const businessRating = manifest?.metadata?.rating;
   const businessReviews = manifest?.metadata?.reviewCount;
 
+  // Filter to direct competitors only for the matrix
+  const directCompetitors = competitors.filter(c => c.competitorCategory === 'direct' || c.competitorCategory == null);
+
   // Build target business row
   const targetWeight = (businessReviews ?? 0) * (businessRating ?? 0);
-  const competitorWeightSum = competitors.reduce((sum, c) => sum + (c.reviewCount ?? 0) * (c.rating ?? 0), 0);
+  const competitorWeightSum = directCompetitors.reduce((sum, c) => sum + (c.reviewCount ?? 0) * (c.rating ?? 0), 0);
   const totalWeight = targetWeight + competitorWeightSum;
   const targetShare = totalWeight > 0 ? (targetWeight / totalWeight) * 100 : null;
 
@@ -339,7 +348,7 @@ function CompetitorMatrixTable({ competitors, manifest, insight }: { competitors
   type MatrixRow = { name: string; rating?: number; reviewCount?: number; marketShare?: number; priceLevel?: string; photoUrl?: string; isTarget: boolean };
   const rows: MatrixRow[] = [
     { name: businessName, rating: businessRating, reviewCount: businessReviews, marketShare: targetShare ?? undefined, isTarget: true },
-    ...[...competitors].sort((a, b) => (b.localMarketShare ?? 0) - (a.localMarketShare ?? 0)).map(c => ({
+    ...[...directCompetitors].sort((a, b) => (b.localMarketShare ?? 0) - (a.localMarketShare ?? 0)).map(c => ({
       name: c.name,
       rating: c.rating,
       reviewCount: c.reviewCount,
@@ -414,8 +423,9 @@ function CompetitorMatrixTable({ competitors, manifest, insight }: { competitors
             ))}
           </TableBody>
         </Table>
-        <div className="px-4 py-2.5 border-t">
+        <div className="px-4 py-2.5 border-t space-y-1">
           <ChartInsight insight={insight} />
+          <p className="text-[11px] text-muted-foreground/60" dir="rtl">مصفوفة المنافسين المباشرين فقط</p>
         </div>
       </CardContent>
     </Card>
@@ -612,7 +622,7 @@ function StrengthsRisksRow({ strengths, risks }: { strengths?: string[]; risks?:
       )}
       {(risks?.length ?? 0) > 0 && (
         <div className="rounded-xl border border-rose-500/20 bg-rose-500/[0.04] p-4 space-y-2">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-rose-400/70">المخاطر</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-rose-400/70">نقاط الضعف</p>
           <ul className="space-y-1.5">
             {risks!.map((r, i) => (
               <li key={i} className="flex items-start gap-2">
@@ -765,7 +775,7 @@ function ActionPlanContent({ section }: { section: ReportSection }) {
                             <CollapsibleContent>
                               <div className={cn("px-5 pb-4 pt-1 border-r-2", pal.taskBorder)}>
                                 <p className="text-xs text-muted-foreground/60 mb-2 uppercase tracking-wider">الخطوات</p>
-                                <ol className="space-y-2">
+                                <ol className="space-y-6">
                                   {task.steps.map((step, stepIdx) => (
                                     <li key={stepIdx} className="flex items-start gap-2.5">
                                       <span className={cn(
@@ -1507,27 +1517,37 @@ function MarketDataSection({
   competitors,
   competitorReviews,
   marketData,
+  location,
+  businessName,
 }: {
   competitors: CollectedCompetitor[];
   competitorReviews: CollectedCompetitorWithReviews[];
   marketData?: CollectedMarketData;
+  location?: { lat: number; lon: number; radius: number };
+  businessName?: string;
 }) {
   const [currentPage, setCurrentPage] = useState(1);
   const [sortBy, setSortBy] = useState<'rating' | 'reviews'>('rating');
+  const [categoryFilter, setCategoryFilter] = useState<'all' | 'direct' | 'indirect'>('all');
   const itemsPerPage = 6;
-  
+
   if (competitors.length === 0) return null;
 
-  // Sort competitors by selected criteria
-  const sortedCompetitors = [...competitors].sort((a, b) => {
-    if (sortBy === 'rating') {
-      return (b.rating ?? 0) - (a.rating ?? 0);
-    }
+  // Apply category filter then sort
+  const filteredCompetitors = categoryFilter === 'all'
+    ? competitors
+    : competitors.filter(c => c.competitorCategory === categoryFilter);
+
+  const sortedCompetitors = [...filteredCompetitors].sort((a, b) => {
+    if (sortBy === 'rating') return (b.rating ?? 0) - (a.rating ?? 0);
     return (b.reviewCount ?? 0) - (a.reviewCount ?? 0);
   });
 
   const totalPages = Math.ceil(sortedCompetitors.length / itemsPerPage);
   const currentCompetitors = sortedCompetitors.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
+  const directCount = competitors.filter(c => c.competitorCategory === 'direct').length;
+  const indirectCount = competitors.filter(c => c.competitorCategory === 'indirect').length;
 
   const PRICE_LABELS: Record<string, string> = {
     PRICE_LEVEL_FREE:           'مجاني',
@@ -1539,6 +1559,15 @@ function MarketDataSection({
 
   return (
     <div className="space-y-6" dir="rtl">
+      {/* Map */}
+      {location && (
+        <CompetitorMap
+          businessName={businessName ?? ''}
+          location={location}
+          competitors={competitors}
+        />
+      )}
+
       {/* Market Share Summary */}
       {marketData && (
         <Card>
@@ -1561,34 +1590,52 @@ function MarketDataSection({
         </Card>
       )}
 
-      {/* Unified Competitor Matrix Table */}
+      {/* Unified Competitor Table */}
       <Card>
         <CardHeader className="pb-2">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-base"> المنافسين ({competitors.length})</CardTitle>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setSortBy('rating')}
-                className={cn(
-                  "px-2 py-1 text-xs rounded-md border transition-colors",
-                  sortBy === 'rating' 
-                    ? "bg-primary text-primary-foreground" 
-                    : "bg-background hover:bg-muted"
-                )}
-              >
-                ★ ترتيب بالتقييم
-              </button>
-              <button
-                onClick={() => setSortBy('reviews')}
-                className={cn(
-                  "px-2 py-1 text-xs rounded-md border transition-colors",
-                  sortBy === 'reviews' 
-                    ? "bg-primary text-primary-foreground" 
-                    : "bg-background hover:bg-muted"
-                )}
-              >
-                📝 ترتيب بالمراجعات
-              </button>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <CardTitle className="text-base">المنافسين ({filteredCompetitors.length}{categoryFilter !== 'all' ? ` من ${competitors.length}` : ''})</CardTitle>
+            <div className="flex flex-wrap gap-2">
+              {/* Category filter */}
+              <div className="flex gap-1 rounded-lg border bg-muted/30 p-0.5">
+                {([['all', `الكل (${competitors.length})`], ['direct', `مباشر (${directCount})`], ['indirect', `غير مباشر (${indirectCount})`]] as const).map(([val, label]) => (
+                  <button
+                    key={val}
+                    onClick={() => { setCategoryFilter(val); setCurrentPage(1); }}
+                    className={cn(
+                      "px-2 py-1 text-xs rounded-md transition-colors",
+                      categoryFilter === val
+                        ? val === 'direct' ? "bg-red-500/20 text-red-400 font-medium"
+                          : val === 'indirect' ? "bg-amber-500/20 text-amber-400 font-medium"
+                          : "bg-primary text-primary-foreground font-medium"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              {/* Sort */}
+              <div className="flex gap-1">
+                <button
+                  onClick={() => setSortBy('rating')}
+                  className={cn(
+                    "px-2 py-1 text-xs rounded-md border transition-colors",
+                    sortBy === 'rating' ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted"
+                  )}
+                >
+                  ★ التقييم
+                </button>
+                <button
+                  onClick={() => setSortBy('reviews')}
+                  className={cn(
+                    "px-2 py-1 text-xs rounded-md border transition-colors",
+                    sortBy === 'reviews' ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted"
+                  )}
+                >
+                  📝 المراجعات
+                </button>
+              </div>
             </div>
           </div>
         </CardHeader>
@@ -1598,6 +1645,7 @@ function MarketDataSection({
               <TableRow>
                 <TableHead className="text-right w-16">الصورة</TableHead>
                 <TableHead className="text-right">الاسم</TableHead>
+                <TableHead className="text-right">النوع</TableHead>
                 <TableHead className="text-right">التقييم</TableHead>
                 <TableHead className="text-right">التقييمات</TableHead>
                 <TableHead className="text-right">حصة السوق</TableHead>
@@ -1618,6 +1666,18 @@ function MarketDataSection({
                     )}
                   </TableCell>
                   <TableCell className="font-medium">{comp.name}</TableCell>
+                  <TableCell>
+                    <span className={cn(
+                      "inline-block rounded px-1.5 py-0.5 text-[10px] font-medium whitespace-nowrap",
+                      comp.competitorCategory === 'direct'
+                        ? "bg-red-500/15 text-red-500"
+                        : comp.competitorCategory === 'indirect'
+                          ? "bg-amber-500/15 text-amber-500"
+                          : "bg-muted text-muted-foreground"
+                    )}>
+                      {comp.competitorCategory === 'direct' ? 'مباشر' : comp.competitorCategory === 'indirect' ? 'غير مباشر' : '—'}
+                    </span>
+                  </TableCell>
                   <TableCell>
                     {comp.rating != null ? (
                       <span className="flex items-center gap-1">
@@ -1963,6 +2023,8 @@ export function ReportView({
                   competitors={collectedData.competitors}
                   competitorReviews={collectedData.competitorReviews}
                   marketData={collectedData.marketData}
+                  location={collectedData.location}
+                  businessName={manifest?.metadata?.businessName}
                 />
               );
             }

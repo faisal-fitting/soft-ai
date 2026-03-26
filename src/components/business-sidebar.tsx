@@ -184,7 +184,6 @@ export function BusinessSidebar({ manifest, isGenerating, collectedData }: Props
       collapsible="none"
       className="border-l border-white/6 bg-[#050505]"
     >
-      {/* ── Brand Header ──────────────────────────────────────────────────────── */}
       <SidebarHeader className="border-b border-white/6 px-4 py-3">
         <div className="flex items-center gap-2">
           <img
@@ -194,9 +193,7 @@ export function BusinessSidebar({ manifest, isGenerating, collectedData }: Props
           />
         </div>
       </SidebarHeader>
-
       <SidebarContent>
-        {/* ── Loading skeleton ──────────────────────────────────────────────── */}
         {isGenerating && !meta && (
           <SidebarGroup>
             <SidebarGroupContent>

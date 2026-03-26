@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
-  BrainCircuit,
   TrendingUp,
   Target,
   BarChart3,
@@ -65,24 +64,18 @@ export function ExecutivePreview() {
       {/* ── Content Layer ────────────────────────────────────── */}
       <div className="relative z-10 flex flex-col h-full p-8">
 
-        {/* Logo / Brand - Staggered Entrance */}
+        {/* Logo - Staggered Entrance */}
         <motion.div
-          className="flex items-center gap-3 mb-12"
+          className="mb-12"
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
         >
-          <motion.div
-            className="size-10 rounded-xl bg-primary flex items-center justify-center"
-            animate={{ scale: [1, 1.05, 1] }}
-            transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-          >
-            <BrainCircuit className="size-5 text-primary-foreground" />
-          </motion.div>
-          <div>
-            <h1 className="text-lg font-bold text-foreground tracking-tight">CBO.AI</h1>
-            <p className="text-xs text-muted-foreground">Business Intelligence</p>
-          </div>
+          <img
+            src="/logo.png"
+            alt="CBO.AI"
+            className="h-24 w-auto"
+          />
         </motion.div>
 
         {/* Main Headline - Staggered Entrance */}

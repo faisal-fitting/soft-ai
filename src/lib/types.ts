@@ -292,6 +292,10 @@ export type CollectedCompetitor = {
   priceLevel?: string;
   photoUrl?: string;
   localMarketShare?: number;
+  lat?: number;
+  lon?: number;
+  primaryType?: string;
+  competitorCategory: 'direct' | 'indirect';
 };
 
 export type CollectedCompetitorWithReviews = {
@@ -299,6 +303,7 @@ export type CollectedCompetitorWithReviews = {
   rating?: number;
   reviewCount?: number;
   photoUrl?: string;
+  competitorCategory?: 'direct' | 'indirect';
   reviews: Array<{ rating: number; snippet?: string; date?: string }>;
 };
 
@@ -326,4 +331,5 @@ export type CollectedData = {
   competitorReviews: CollectedCompetitorWithReviews[];
   placeDetails: CollectedPlaceDetails;
   marketData?: CollectedMarketData;
+  location?: { lat: number; lon: number; radius: number };
 };

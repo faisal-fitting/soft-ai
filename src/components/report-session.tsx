@@ -164,6 +164,16 @@ export function ReportSession({ sessionKey, urlRunId }: Props) {
       console.log("[observe:onFinish]");
       setIsObservingRunning(false);
       hasStartedObserving.current = false;
+      
+      // Workflow definitely completed - retry fetching manifest reactively
+      if (urlRunId) {
+        getWorkflowRun(urlRunId).then(({ manifest }) => {
+          if (manifest) {
+            setManifest(manifest);
+            getCollectedData(urlRunId).then(setCollectedData);
+          }
+        });
+      }
     },
     onError: (err: unknown) => {
       console.error("[observe:error]", err);
@@ -203,7 +213,9 @@ export function ReportSession({ sessionKey, urlRunId }: Props) {
           setIsObservingRunning(true);
           console.log("[ReportSession] workflow running, will observe");
         } else {
-          setRestoreError(urlRunId);
+          // Workflow completed but state not persisted yet - trigger observe to get result
+          setIsObservingRunning(true);
+          console.log("[ReportSession] status:", status, "- triggering observe");
         }
         setLoadingHistory(false);
       })

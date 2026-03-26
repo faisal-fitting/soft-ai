@@ -137,16 +137,21 @@ Frontend Updates
 - MarketDataSection: Page size 6, sorting by rating/reviews buttons
 - engagement-gauge.tsx: New component for engagement rate visualization
 All 16 points addressed. Ready for testing!
-
-
-when the workflow is done, the result are not immediately rendered. i have to refresh to view the result. this is the logs [store:setFormData] ObjectbusinessName: "فايل"[[Prototype]]: Object
-forward-logs-shared.ts:95 [store:startReport] ObjectbusinessName: "فايل"runId: "2f866b3a-1179-490d-811c-4abe02c4743b"threadId: "673db8cf-54da-4b8a-95a3-b7b023ff38d9"[[Prototype]]: Object
-forward-logs-shared.ts:95 [observe:onData] data-workflow
-forward-logs-shared.ts:95 [form:onData] data-workflow running
-forward-logs-shared.ts:95 [store:setFormData] Object
-forward-logs-shared.ts:95 [store:startReport] Object
-forward-logs-shared.ts:95 [observe:onData] data-workflow
-forward-logs-shared.ts:95 [form:onData] data-workflow success
-forward-logs-shared.ts:95 [store:setFormData] Object
-forward-logs-shared.ts:95 [store:startReport] Object
-forward-logs-shared.ts:95 [observe:onFinish]
+----------------
+My Recommendation as CPO
+Go with the hybrid:
+Entity	Strategy	Rationale
+Target Business	3 sorts × 10 = 30	Core analysis. More variety = richer insights. Worth the extra call.
+Competitors	3 sorts × 5 = 15 each	180 total reviews is too much for LLM context. 90 is manageable.
+Total API calls: 3 (target) + 18 (competitors) = 21 calls
+Additional cost: ~$0.07 extra vs current
+---
+Why not full 3×10 for competitors:
+1. LLM context bloat - 180 competitor reviews = massive prompt, potentially degraded analysis quality
+2. Diminishing returns - themes emerge after ~10-15 reviews; extra data adds noise
+3. Business priority - user cares more about their own business than competitors
+---
+Implementation notes:
+1. Deduping: Simple set-based dedupe by review ID/author to avoid overlap
+2. Parallel execution: Run all 3 sorts in parallel for each business (same latency as single call)
+3. Timeout handling: If one sort fails, still proceed with available data

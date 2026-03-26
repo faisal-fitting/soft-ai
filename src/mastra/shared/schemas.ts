@@ -214,6 +214,11 @@ export const competitorReviewSummarySchema = z.object({
   estimatedMonthlyRevenue: z.number().optional().describe('Estimated monthly revenue based on rating × reviewCount × base factor'),
   photoUrl: z.string().optional().describe('Photo URL from Google Places'),
   priceLevel: z.number().optional().describe('Price level 1-4 (1=$, 4=$$$$)'),
+  lat: z.number().optional().describe('Latitude of the competitor location'),
+  lon: z.number().optional().describe('Longitude of the competitor location'),
+  types: z.array(z.string()).optional().describe('All Google place types for this competitor'),
+  primaryType: z.string().optional().describe('Primary Google place type'),
+  competitorCategory: z.enum(['direct', 'indirect']).optional().describe('Classification: direct = same primary type as target, indirect = different type but overlapping audience'),
   reviews: z.array(z.object({
     rating: z.number(),
     snippet: z.string().optional(),
