@@ -4,6 +4,22 @@ import { unstable_noStore as noStore } from 'next/cache';
 import { toAISdkV5Messages } from '@mastra/ai-sdk/ui';
 import { mastra } from '@/mastra';
 import type { ReportManifest, CollectedData } from '@/lib/types';
+import { resolveGooglePhotoUrl } from '@/mastra/tools/google-places';
+
+/** Extract photo name from a redirect URL, e.g. "places/xxx/photos/yyy" */
+function extractPlacesPhotoName(url: string): string | undefined {
+  const match = url.match(/\/v1\/(places\/[^/]+\/photos\/[^/]+)\/media/);
+  return match?.[1];
+}
+
+/** Resolve a places.googleapis.com redirect URL to a direct CDN URL. */
+async function resolveIfPlacesUrl(url: string | undefined, maxHeightPx = 400): Promise<string | undefined> {
+  if (!url || !url.includes('places.googleapis.com')) return url;
+  const name = extractPlacesPhotoName(url);
+  if (!name) return url;
+  return await resolveGooglePhotoUrl(name, maxHeightPx) ?? url;
+}
+
 
 export async function getThreadMessages(threadId: string) {
   noStore();
@@ -82,6 +98,7 @@ export async function getCollectedData(runId: string): Promise<CollectedData | n
         soldUnits: item.soldUnits,
         totalRevenue: item.totalRevenue,
         revenueShare: item.revenueShare,
+        salesShare: item.salesShare,
         contributionMarginPerUnit: item.contributionMarginPerUnit,
         profitPerUnit: item.profitPerUnit,
         fullCostPerUnit: item.fullCostPerUnit,

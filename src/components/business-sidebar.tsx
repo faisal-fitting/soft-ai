@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Image from "next/image";
 import { motion, AnimatePresence } from "motion/react";
 import { MapPin, Star, Phone, Globe, Clock, ChevronDown, ChevronUp, TrendingUp } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -108,6 +109,7 @@ function HealthArc({ score, arcColor }: { score: number; arcColor: string }) {
 
   return (
     <div className="flex flex-col items-center gap-1 py-2">
+      <p className="text-xs text-muted-foreground tracking-widest uppercase">درجة الأداء</p>
       <div className="relative">
         <svg width="108" height="108" viewBox="0 0 108 108">
           {/* Bg track */}
@@ -155,7 +157,6 @@ function HealthArc({ score, arcColor }: { score: number; arcColor: string }) {
           </text>
         </svg>
       </div>
-      <p className="text-xs text-muted-foreground tracking-widest uppercase">درجة الأداء</p>
     </div>
   );
 }
@@ -234,10 +235,11 @@ export function BusinessSidebar({ manifest, isGenerating, collectedData }: Props
                     transition={{ duration: 0.5, ease: "easeOut" }}
                     className="mb-3 overflow-hidden rounded-xl border border-white/[0.08]"
                   >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
+                    <Image
                       src={meta.photoUrl}
                       alt={meta.displayName ?? meta.businessName}
+                      width={400}
+                      height={144}
                       className="h-36 w-full object-cover"
                     />
                   </motion.div>
@@ -388,13 +390,13 @@ export function BusinessSidebar({ manifest, isGenerating, collectedData }: Props
                       <span className="text-2xl font-black tabular-nums text-foreground">
                         {directive.northStarMetric.value.toLocaleString("ar-SA")}
                         {directive.northStarMetric.unit && (
-                          <span className="text-sm font-normal text-muted-foreground ml-0.5">{directive.northStarMetric.unit}</span>
+                          <span className="text-sm font-normal text-muted-foreground mx-1">{directive.northStarMetric.unit}</span>
                         )}
                       </span>
                       <span className="text-xs text-muted-foreground">
                         → {directive.northStarMetric.target.toLocaleString("ar-SA")}
                         {directive.northStarMetric.unit && (
-                          <span className="ml-0.5">{directive.northStarMetric.unit}</span>
+                          <span className="mx-1">{directive.northStarMetric.unit}</span>
                         )}
                       </span>
                     </div>

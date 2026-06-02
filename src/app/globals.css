@@ -186,3 +186,7 @@
     text-align: right;
   }
 }
+
+.maplibregl-ctrl-attrib.maplibregl-compact-show {
+    visibility: hidden !important;
+}

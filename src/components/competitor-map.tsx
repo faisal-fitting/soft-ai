@@ -1,16 +1,25 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
+import Image from "next/image";
 import turfCircle from "@turf/circle";
 import {
   Map,
   MapMarker,
   MarkerContent,
+  MarkerLabel,
   MarkerPopup,
   MapControls,
   useMap,
 } from "@/components/ui/map";
 import type { CollectedCompetitor } from "@/lib/types";
+import {
+  MapPin,
+  MapPinned,
+  Star,
+  MessageSquareText,
+  TrendingUp,
+} from "lucide-react";
 
 // ── Radius Circle ─────────────────────────────────────────────────────────────
 
@@ -40,71 +49,69 @@ function RadiusCircle({
       id: fillId,
       type: "fill",
       source: sourceId,
-      paint: { "fill-color": "#2E5BFF", "fill-opacity": 0.07 },
+      paint: { "fill-color": "#034bff", "fill-opacity": 0.07 },
     });
     map.addLayer({
       id: borderId,
       type: "line",
       source: sourceId,
       paint: {
-        "line-color": "#2E5BFF",
+        "line-color": "#034bff",
         "line-width": 1.5,
         "line-opacity": 0.5,
         "line-dasharray": [4, 3],
       },
     });
 
-    return () => {
-      if (map.getLayer(borderId)) map.removeLayer(borderId);
-      if (map.getLayer(fillId)) map.removeLayer(fillId);
-      if (map.getSource(sourceId)) map.removeSource(sourceId);
-    };
+    // Fit the map to the circle bounds so it's fully visible
+    const coords = circleGeoJSON.geometry.coordinates[0] as [number, number][];
+    let minLng = Infinity, maxLng = -Infinity, minLat = Infinity, maxLat = -Infinity;
+    for (const [lng, lat] of coords) {
+      if (lng < minLng) minLng = lng;
+      if (lng > maxLng) maxLng = lng;
+      if (lat < minLat) minLat = lat;
+      if (lat > maxLat) maxLat = lat;
+    }
+    map.fitBounds([minLng, minLat, maxLng, maxLat], { padding: 40, maxZoom: 15 });
+
+    // No cleanup needed — parent Map's map.remove() destroys all layers/sources
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [map, isLoaded]);
 
   return null;
 }
 
-// ── Pin SVGs ──────────────────────────────────────────────────────────────────
+// ── Helpers ──────────────────────────────────────────────────────────────────
 
-function TargetPin() {
-  return (
-    <svg width="28" height="36" viewBox="0 0 28 36" fill="none">
-      <ellipse cx="14" cy="34" rx="6" ry="2" fill="rgba(0,0,0,0.25)" />
-      <path
-        d="M14 0C8.477 0 4 4.477 4 10c0 7.5 10 24 10 24S24 17.5 24 10C24 4.477 19.523 0 14 0z"
-        fill="#2E5BFF"
-      />
-      <circle cx="14" cy="10" r="5" fill="white" />
-      <circle cx="14" cy="10" r="2.5" fill="#2E5BFF" />
-    </svg>
-  );
+const PRICE_LABELS: Record<string, string> = {
+  PRICE_LEVEL_FREE: "مجاني",
+  PRICE_LEVEL_INEXPENSIVE: "اقتصادي",
+  PRICE_LEVEL_MODERATE: "متوسط",
+  PRICE_LEVEL_EXPENSIVE: "غالي",
+  PRICE_LEVEL_VERY_EXPENSIVE: "فاخر",
+};
+
+const TYPE_LABELS: Record<string, string> = {
+  cafe: "مقهى",
+  coffee_shop: "محمصة قهوة",
+  restaurant: "مطعم",
+  fast_food_restaurant: "وجبات سريعة",
+  casual_dining_restaurant: "مطعم عائلي",
+  fine_dining_restaurant: "مطعم فاخر",
+  bakery: "مخبز",
+  juice_shop: "عصائر",
+  ice_cream_shop: "آيس كريم",
+  dessert_shop: "حلويات",
+};
+
+function priceLevelDisplay(level?: string) {
+  if (!level) return null;
+  return PRICE_LABELS[level] ?? level;
 }
 
-function DirectPin() {
-  return (
-    <svg width="22" height="28" viewBox="0 0 22 28" fill="none">
-      <ellipse cx="11" cy="26.5" rx="4" ry="1.5" fill="rgba(0,0,0,0.2)" />
-      <path
-        d="M11 0C6.582 0 3 3.582 3 8c0 5.5 8 18 8 18S19 13.5 19 8C19 3.582 15.418 0 11 0z"
-        fill="#ef4444"
-      />
-      <circle cx="11" cy="8" r="3.5" fill="white" opacity="0.9" />
-    </svg>
-  );
-}
-
-function IndirectPin() {
-  return (
-    <svg width="22" height="28" viewBox="0 0 22 28" fill="none">
-      <ellipse cx="11" cy="26.5" rx="4" ry="1.5" fill="rgba(0,0,0,0.2)" />
-      <path
-        d="M11 0C6.582 0 3 3.582 3 8c0 5.5 8 18 8 18S19 13.5 19 8C19 3.582 15.418 0 11 0z"
-        fill="#f59e0b"
-      />
-      <circle cx="11" cy="8" r="3.5" fill="white" opacity="0.9" />
-    </svg>
-  );
+function typeLabel(primaryType?: string) {
+  if (!primaryType) return null;
+  return TYPE_LABELS[primaryType] ?? primaryType.replace(/_/g, " ");
 }
 
 // ── Legend ────────────────────────────────────────────────────────────────────
@@ -115,18 +122,17 @@ function MapLegend() {
       className="absolute bottom-3 left-3 z-10 rounded-lg border border-white/10 bg-black/70 px-3 py-2 text-xs backdrop-blur-sm"
       dir="rtl"
     >
-      <div className="mb-1 font-semibold text-white/70">الرمز</div>
-      <div className="flex flex-col gap-1">
+      <div className="flex flex-col gap-1.5">
         <div className="flex items-center gap-2">
-          <span className="inline-block h-3 w-3 rounded-full bg-[#2E5BFF]" />
-          <span className="text-white/80">الهدف</span>
+          <MapPin size={12} className="fill-[#034bff] text-[#034bff]" />
+          <span className="text-white/80">المنشأة</span>
         </div>
         <div className="flex items-center gap-2">
-          <span className="inline-block h-3 w-3 rounded-full bg-[#ef4444]" />
+          <MapPin size={12} className="fill-red-500 text-red-500" />
           <span className="text-white/80">منافس مباشر</span>
         </div>
         <div className="flex items-center gap-2">
-          <span className="inline-block h-3 w-3 rounded-full bg-[#f59e0b]" />
+          <MapPin size={12} className="fill-amber-500 text-amber-500" />
           <span className="text-white/80">منافس غير مباشر</span>
         </div>
       </div>
@@ -134,13 +140,6 @@ function MapLegend() {
   );
 }
 
-// ── Price level helper ────────────────────────────────────────────────────────
-
-function priceLevelStr(level?: string | number) {
-  const n = typeof level === "string" ? parseInt(level.replace(/\D/g, "")) : level;
-  if (!n) return null;
-  return "﷼".repeat(Math.min(n, 4));
-}
 
 // ── Main Component ────────────────────────────────────────────────────────────
 
@@ -150,14 +149,25 @@ type CompetitorMapProps = {
   competitors: CollectedCompetitor[];
 };
 
-export function CompetitorMap({ businessName, location, competitors }: CompetitorMapProps) {
-  const placed = competitors.filter((c) => c.lat != null && c.lon != null);
-
+export function CompetitorMap({
+  businessName,
+  location,
+  competitors,
+}: CompetitorMapProps) {
+  const placed = useMemo(
+    () =>
+      competitors.filter((c) => {
+        if (c.lat == null || c.lon == null) return false;
+        // Exclude the target business itself (exact same coordinates)
+        return c.lat !== location.lat || c.lon !== location.lon;
+      }),
+    [competitors, location.lat, location.lon],
+  );
   return (
-    <div className="relative h-[400px] w-full overflow-hidden rounded-xl">
+    <div className="relative h-100 w-full overflow-hidden rounded-xl">
       <Map
         center={[location.lon, location.lat]}
-        zoom={14}
+        zoom={13}
         theme="dark"
         className="h-full w-full"
       >
@@ -166,61 +176,175 @@ export function CompetitorMap({ businessName, location, competitors }: Competito
           radiusMeters={location.radius}
         />
 
-        <MapControls showZoom showCompass />
+        <MapControls showZoom />
 
         {/* Target business pin */}
-        <MapMarker longitude={location.lon} latitude={location.lat} anchor="bottom">
+        <MapMarker
+          longitude={location.lon}
+          latitude={location.lat}
+          anchor="bottom"
+        >
           <MarkerContent>
-            <TargetPin />
+            <div className="flex flex-col items-center">
+              <div className="rounded-full bg-[#034bff] p-1.5 shadow-lg shadow-[#034bff]/30 ring-2 ring-white/20">
+                <MapPinned size={18} className="text-white" strokeWidth={2} />
+              </div>
+            </div>
+            <MarkerLabel position="bottom">
+              <span className="rounded-md bg-[#034bff]/90 px-1.5 py-0.5 text-[10px] font-semibold text-white shadow">
+                {businessName}
+              </span>
+            </MarkerLabel>
           </MarkerContent>
-          <MarkerPopup>
-            <div className="min-w-[140px] p-2" dir="rtl">
-              <div className="text-sm font-semibold text-white">{businessName}</div>
-              <div className="mt-0.5 text-xs text-[#2E5BFF]">المنشأة المستهدفة</div>
+          <MarkerPopup className="p-0 w-56">
+            <div
+              className="space-y-2 rounded-lg border border-white/10 bg-[#0a0f1a] p-3"
+              dir="rtl"
+            >
+              <div>
+                <span className="text-[10px] font-medium uppercase tracking-wide text-[#034bff]">
+                  المنشأة المستهدفة
+                </span>
+                <h3 className="text-sm font-semibold leading-tight text-white">
+                  {businessName}
+                </h3>
+              </div>
+              <div className="text-xs text-white/50">
+                نطاق البحث:{" "}
+                {location.radius >= 1000
+                  ? `${(location.radius / 1000).toFixed(1)} كم`
+                  : `${location.radius} م`}
+              </div>
             </div>
           </MarkerPopup>
         </MapMarker>
 
         {/* Competitor pins */}
-        {placed.map((comp) => (
-          <MapMarker
-            key={`${comp.name}-${comp.lat}-${comp.lon}`}
-            longitude={comp.lon!}
-            latitude={comp.lat!}
-            anchor="bottom"
-          >
-            <MarkerContent className="cursor-pointer">
-              {comp.competitorCategory === "direct" ? <DirectPin /> : <IndirectPin />}
-            </MarkerContent>
-            <MarkerPopup>
-              <div className="min-w-[160px] p-2" dir="rtl">
-                <div className="text-sm font-semibold text-white">{comp.name}</div>
-                <div className="mt-1 flex items-center gap-2 text-xs text-white/70">
-                  {comp.rating != null && (
-                    <span>⭐ {comp.rating.toFixed(1)}</span>
-                  )}
-                  {comp.reviewCount != null && (
-                    <span>({comp.reviewCount.toLocaleString()})</span>
-                  )}
-                  {priceLevelStr(comp.priceLevel) && (
-                    <span className="text-amber-400">{priceLevelStr(comp.priceLevel)}</span>
-                  )}
-                </div>
-                <div
-                  className={`mt-1.5 inline-block rounded px-1.5 py-0.5 text-[10px] font-medium ${
-                    comp.competitorCategory === "direct"
-                      ? "bg-red-500/20 text-red-400"
-                      : "bg-amber-500/20 text-amber-400"
-                  }`}
-                >
-                  {comp.competitorCategory === "direct" ? "منافس مباشر" : "منافس غير مباشر"}
-                </div>
-              </div>
-            </MarkerPopup>
-          </MapMarker>
-        ))}
-      </Map>
+        {placed.map((comp) => {
+          const isDirect = comp.competitorCategory === "direct";
+          const pinColor = isDirect ? "rgb(239 68 68)" : "rgb(245 158 11)";
+          const badgeCls = isDirect ? "bg-red-500/15 text-red-400" : "bg-amber-500/15 text-amber-400";
 
+          return (
+            <MapMarker
+              key={`${comp.name}-${comp.lat}-${comp.lon}`}
+              longitude={comp.lon!}
+              latitude={comp.lat!}
+              anchor="bottom"
+            >
+              <MarkerContent className="cursor-pointer">
+                <MapPin
+                  size={18}
+                  strokeWidth={2.5}
+                  fill={pinColor}
+                  className="drop-shadow-sm transition-transform hover:scale-125 hover:drop-shadow-md"
+                  style={{ color: pinColor }}
+                />
+              </MarkerContent>
+              <MarkerPopup className="p-0 w-64">
+                <div
+                  className="space-y-2.5 rounded-lg border border-white/10 bg-[#0a0f1a] p-3"
+                  dir="rtl"
+                >
+                  {/* Header: photo + name */}
+                  <div className="flex items-start gap-2.5">
+                    {comp.photoUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <Image
+                        src={comp.photoUrl}
+                        alt=""
+                        width={44}
+                        height={44}
+                        className="h-11 w-11 shrink-0 rounded-lg object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-white/5">
+                        <MapPin size={16} className="text-white/30" />
+                      </div>
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <h3 className="truncate text-sm font-semibold leading-tight text-white">
+                        {comp.name}
+                      </h3>
+                      {typeLabel(comp.primaryType) && (
+                        <span className="text-[11px] text-white/40">
+                          {typeLabel(comp.primaryType)}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Stats row */}
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+                    {comp.rating != null && (
+                      <div className="flex items-center gap-1">
+                        <Star
+                          size={12}
+                          className="fill-amber-400 text-amber-400"
+                        />
+                        <span className="font-medium text-white">
+                          {comp.rating.toFixed(1)}
+                        </span>
+                      </div>
+                    )}
+                    {comp.reviewCount != null && (
+                      <div className="flex items-center gap-1 text-white/50">
+                        <MessageSquareText size={11} />
+                        <span>{comp.reviewCount.toLocaleString()}</span>
+                      </div>
+                    )}
+                    {priceLevelDisplay(comp.priceLevel) && (
+                      <span className="text-amber-400/70">
+                        {priceLevelDisplay(comp.priceLevel)}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Market share bar */}
+                  {comp.localMarketShare != null &&
+                    comp.localMarketShare > 0 && (
+                      <div className="space-y-0.5">
+                        <div className="flex items-center justify-between text-[10px]">
+                          <span className="flex items-center gap-1 text-white/40">
+                            <TrendingUp size={10} />
+                            حصة السوق
+                          </span>
+                          <span className="font-medium text-white/70">
+                            {comp.localMarketShare.toFixed(1)}%
+                          </span>
+                        </div>
+                        <div className="h-1 overflow-hidden rounded-full bg-white/5">
+                          <div
+                            className="h-full rounded-full"
+                            style={{
+                              width: `${Math.min(comp.localMarketShare, 100)}%`,
+                              backgroundColor: pinColor,
+                              opacity: 0.7,
+                            }}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                  {/* Address */}
+                  {comp.address && (
+                    <p className="line-clamp-1 text-[11px] leading-relaxed text-white/30">
+                      {comp.address}
+                    </p>
+                  )}
+
+                  {/* Category badge */}
+                  <div
+                    className={`inline-block rounded-md px-2 py-0.5 text-[10px] font-medium ${badgeCls}`}
+                  >
+                    {isDirect ? "منافس مباشر" : "منافس غير مباشر"}
+                  </div>
+                </div>
+              </MarkerPopup>
+            </MapMarker>
+          );
+        })}
+      </Map>
       <MapLegend />
     </div>
   );

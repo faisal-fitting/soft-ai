@@ -392,11 +392,11 @@ const generateStrategicDirective = createStep({
   description: 'Set the tone and North Star for the report',
   inputSchema: z.record(z.string(), z.any()),
   outputSchema: strategicDirectiveSchema,
-  execute: async ({ inputData, mastra, writer, getStepResult }) => {
+  execute: async ({ inputData, mastra, writer, getStepResult, getInitData }) => {
     const agent = mastra?.getAgent('cboAgent');
     if (!agent) throw new Error('cboAgent not found');
 
-    const threadId = inputData.threadId;
+    const threadId = (getInitData?.() as any)?.threadId;
     const memoryThreadId = threadId ?? `workflow-${Date.now()}`;
 
     // Create thread if it doesn't exist yet (required for observational memory)
@@ -649,20 +649,19 @@ const generateActionPlanSection = createStep({
     financials: reportSectionSchema,
     digital: reportSectionSchema,
     market: reportSectionSchema,
-    threadId: z.string().optional(),
   }),
   outputSchema: reportSectionSchema,
-  execute: async ({ inputData, mastra, writer }) => {
-    await writer?.write({ 
-      type: 'data-step-progress', 
-      data: { step: 'action-plan', phase: 8, status: 'running', message: 'جاري تجميع خطة العمل...' } 
+  execute: async ({ inputData, mastra, writer, getInitData, runId }) => {
+    await writer?.write({
+      type: 'data-step-progress',
+      data: { step: 'action-plan', phase: 8, status: 'running', message: 'جاري تجميع خطة العمل...' }
     });
-    
+
     const agent = mastra?.getAgent('cboAgent');
     if (!agent) throw new Error('cboAgent not found');
 
-    const threadId = inputData.threadId;
-    
+    const threadId = (getInitData?.() as any)?.threadId;
+
     const semanticSW = {
       strengths: (inputData.base as any).semanticAnalysis?.strengths ?? [],
       weaknesses: (inputData.base as any).semanticAnalysis?.weaknesses ?? [],
@@ -758,36 +757,25 @@ ${toYaml({ conclusion: inputData.market.conclusion, tacticalMoves: inputData.mar
     if (threadId) {
       try {
         const memory = await agent.getMemory();
-        const result = response.object ?? {};
         const directive = (inputData.base as any).directive;
         const base = inputData.base;
 
-        const summary = [
-          `[ملخص التقرير]`,
-          `الاسم: ${base.businessName} | النوع: ${base.businessType}`,
-          `النجم الشمالي: ${directive?.northStarMetric?.name} — الحالي: ${directive?.northStarMetric?.value} — الهدف: ${directive?.northStarMetric?.target}`,
-          `الحالة العامة: ${directive?.overallStatus} | الثيم: ${directive?.theme}`,
+        const workingMemory = [
+          `[Report Context]`,
+          `runId: ${runId}`,
+          `Business: ${base.businessName} | Type: ${base.businessType}`,
+          `North Star: ${directive?.northStarMetric?.name} — Current: ${directive?.northStarMetric?.value} — Target: ${directive?.northStarMetric?.target}`,
+          `Overall Status: ${directive?.overallStatus}`,
           ``,
-          `[الوضع المالي] ${inputData.financials.conclusion?.text}`,
-          `  إيرادات: ${base.netRevenue?.toFixed(0)} | صافي ربح: ${base.netProfit?.toFixed(0)} | هامش: ${base.grossMargin?.toFixed(1)}%`,
-          ``,
-          `[الرقمي] ${inputData.digital.conclusion?.text}`,
-          ``,
-          `[السوق] ${inputData.market.conclusion?.text}`,
-          ``,
-          `[نقاط القوة] ${((result as any).keyStrengths ?? []).join(' | ')}`,
-          `[نقاط الضعف] ${((result as any).keyRisks ?? []).join(' | ')}`,
-          ``,
-          `[خطة العمل] ${(result as any).conclusion?.text ?? ''}`,
-          `المراحل: ${((result as any).phases ?? []).map((p: any) => `${p.title} (${p.goal})`).join(' → ')}`,
-        ].join('\n').slice(0, 1500);
+          `Use the get-report-data tool with the runId above to retrieve detailed report data when answering user questions.`,
+        ].join('\n');
 
         await memory?.updateWorkingMemory({
           threadId: memoryThreadId,
           resourceId: 'user',
-          workingMemory: summary,
+          workingMemory,
         });
-      } catch { /* memory update is best-effort — never block the workflow */ }
+      } catch { /* best-effort */ }
     }
     
     return response.object;
@@ -821,13 +809,12 @@ export const businessAnalysisWorkflow = createWorkflow({
     const nearby = getStepResult<{ nearbyCompetitors: z.infer<typeof nearbyPlaceSchema>[] }>('fetch-nearby-competitors');
     const social = getStepResult<{ socialData: any }>('fetch-social-data');
     const competitorReviews = getStepResult<{ competitorReviews: z.infer<typeof competitorReviewSummarySchema>[] }>('fetch-competitor-reviews');
-    return { 
-        ...base, 
-        reviews: reviews?.reviews, 
+    return {
+        ...base,
+        reviews: reviews?.reviews,
         nearbyCompetitors: nearby?.nearbyCompetitors,
         socialData: social?.socialData,
         competitorReviews: competitorReviews?.competitorReviews ?? [],
-        threadId: (inputData as any).threadId,
     };
   }, { id: 'merge-external-data' })
   .parallel([runSemanticAnalysis, runSocialAudit])
@@ -847,7 +834,6 @@ export const businessAnalysisWorkflow = createWorkflow({
       socialAudit: socialResult,
       directive,
       healthScore,
-      threadId: (inputData as any).threadId,
     };
   }, { id: 'prepare-expert-input' })
   .parallel([generateFinancialSection, generateDigitalSection, generateMarketSection])
@@ -859,7 +845,6 @@ export const businessAnalysisWorkflow = createWorkflow({
       financials: parallel['generate-financial-section'],
       digital: parallel['generate-digital-section'],
       market: parallel['generate-market-section'],
-      threadId: (inputData as any).threadId,
     };
   }, { id: 'expert-aggregator' })
   .then(generateActionPlanSection)

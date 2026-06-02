@@ -1,7 +1,9 @@
 import { Mastra } from '@mastra/core/mastra';
+import { MastraCompositeStore } from '@mastra/core/storage';
 import { PinoLogger } from '@mastra/loggers';
 import { LibSQLStore } from '@mastra/libsql';
-import { Observability, DefaultExporter, CloudExporter, SensitiveDataFilter } from '@mastra/observability';
+import { DuckDBStore } from '@mastra/duckdb';
+import { Observability, MastraStorageExporter, MastraPlatformExporter, SensitiveDataFilter } from '@mastra/observability';
 
 import { businessAnalysisWorkflow } from './workflows/main-workflow';
 
@@ -25,10 +27,16 @@ export const mastra = new Mastra({
     semanticAnalysisAgent,
     socialEngagementAuditor,
   },
-  storage: new LibSQLStore({
-    id: "mastra-storage",
-    url: "libsql://cob-ai-faisal-a.aws-ap-south-1.turso.io",
-    authToken: process.env.LIBSQL_AUTH_TOKEN || "",
+  storage: new MastraCompositeStore({
+    id: 'composite-storage',
+    default: new LibSQLStore({
+      id: 'mastra-storage',
+      url: 'libsql://mastra-faisal-em.aws-ap-south-1.turso.io',
+      authToken: process.env.LIBSQL_AUTH_TOKEN || '',
+    }),
+    domains: {
+      observability: new DuckDBStore({ path: 'mastra-observability.duckdb' }).observability,
+    },
   }),
   logger: new PinoLogger({
     name: 'Mastra',
@@ -39,8 +47,8 @@ export const mastra = new Mastra({
       default: {
         serviceName: 'mastra',
         exporters: [
-          new DefaultExporter(),
-          new CloudExporter(),
+          new MastraStorageExporter(),
+          new MastraPlatformExporter(),
         ],
         spanOutputProcessors: [
           new SensitiveDataFilter(),

@@ -5,6 +5,26 @@ import { placeDetailsSchema } from '../shared/schemas';
 
 const GOOGLE_API_KEY = process.env.GOOGLE_PLACES_API_KEY || 'AIzaSyAgbQvK5FZC_2liZ9mM6a7-HJSz8lC4CoQ';
 
+/**
+ * Resolve a Google Places photo name to a direct CDN URL.
+ * Uses `skipHttpRedirect=true` so the API returns JSON with `photoUri`
+ * instead of a 302 redirect (which gets blocked by ORB in modern browsers).
+ */
+export async function resolveGooglePhotoUrl(
+  photoName: string,
+  maxHeightPx = 400,
+): Promise<string | undefined> {
+  try {
+    const res = await axios.get(
+      `https://places.googleapis.com/v1/${photoName}/media`,
+      { params: { maxHeightPx, skipHttpRedirect: true, key: GOOGLE_API_KEY } },
+    );
+    return res.data?.photoUri ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 // ── getPlaceDetails ─────────────────────────────────────────────────────────
 export const getPlaceDetails = createTool({
   id: 'get-place-details',
@@ -77,7 +97,7 @@ export const getNearbyPlaces = createTool({
         'X-Goog-Api-Key': GOOGLE_API_KEY,
         'X-Goog-FieldMask':
           'places.id,places.displayName,places.rating,places.userRatingCount,' +
-          'places.formattedAddress,places.location,places.types,places.primaryType,places.priceLevel',
+          'places.formattedAddress,places.location,places.types,places.primaryType,places.priceLevel,places.photos',
         'Content-Type': 'application/json',
       },
       data: body,

@@ -4,6 +4,7 @@ import { getPlaceDetails, getNearbyPlaces } from '../tools/google-places';
 import { googleMapsReviewsTool } from '../tools/google-maps-reiews';
 import { socialMediaScraperTool } from '../tools/social-media-scrape';
 import { webSearchTool } from '../tools/web-search';
+import { getReportDataTool } from '../tools/report-data';
 import { businessAnalysisWorkflow } from '../workflows/main-workflow';
 import { socialEngagementAuditor } from './social-engagement-auditor';
 import { semanticAnalysisAgent } from './semantic-analysis';
@@ -143,8 +144,8 @@ export const cboAgent = new Agent({
     - You also have a **Strategic Directive** (Theme and North Star).
     
     **Operating Guidelines (Q&A):**
-    1. **Context Awareness:** Always check the 'manifest' in your history before answering.
-    2. **Data-Driven Answers:** When asked about performance, cite the exact numbers from the charts/JSON data.
+    1. **Context Awareness:** Your working memory contains the report's runId. Before answering any data question, call the get-report-data tool with that runId and the relevant section to retrieve the full report data.
+    2. **Data-Driven Answers:** Always call get-report-data first, then cite exact numbers from the returned data.
        - *Example:* "Your TikTok engagement is 8.5%, which is excellent compared to the 3.5% benchmark in your Digital Presence tab."
     3. **Actionable Strategy:** Connect your answers back to the North Star Metric set in the Directive.
     
@@ -171,6 +172,7 @@ export const cboAgent = new Agent({
     googleMapsReviewsTool,
     socialMediaScraperTool,
     webSearchTool,
+    getReportDataTool,
   },
   agents: {
     socialEngagementAuditor,

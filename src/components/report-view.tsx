@@ -1,5 +1,6 @@
 "use client";
 import dynamic from "next/dynamic";
+import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 
 const CompetitorMap = dynamic(
@@ -29,7 +30,6 @@ import {
   ExternalLink,
   ChevronLeft,
   ChevronRight,
-  ChevronDown,
   Zap,
   ArrowLeft,
   type LucideIcon,
@@ -48,6 +48,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
+import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion";
 import { cn } from "@/lib/utils";
 import type {
   ReportManifest,
@@ -113,7 +114,7 @@ function AnimatedNumber({ value, isPercent }: { value: number; isPercent?: boole
 
 const SECTION_ICON_MAP: Record<string, { icon: LucideIcon; className: string }> = {
   financials:    { icon: DollarSign, className: "size-4 text-emerald-500" },
-  digital:       { icon: Globe,      className: "size-4 text-blue-500"    },
+  digital:       { icon: Globe,      className: "size-4 text-cyan-500"    },
   market:        { icon: BarChart3,  className: "size-4 text-orange-500"  },
   "action-plan": { icon: Target,     className: "size-4 text-primary"     },
   performance:   { icon: Activity,   className: "size-4 text-muted-foreground" },
@@ -384,7 +385,7 @@ function CompetitorMatrixTable({ competitors, manifest, insight }: { competitors
                 <TableCell>
                   {row.photoUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={row.photoUrl} alt="" className="w-10 h-10 rounded-md object-cover" />
+                    <Image src={row.photoUrl} alt="" width={40} height={40} className="w-10 h-10 rounded-md object-cover" />
                   ) : (
                     <div className="w-10 h-10 rounded-md bg-muted/50 flex items-center justify-center">
                       <Globe className="size-4 text-muted-foreground/50" />
@@ -753,27 +754,24 @@ function ActionPlanContent({ section }: { section: ReportSection }) {
                       </div>
 
                       {/* Tasks */}
-                      <div className="divide-y divide-white/[0.04]">
+                      <Accordion type="single" collapsible defaultValue="task-0" className="divide-y divide-white/[0.04]">
                         {phase.tasks.map((task, taskIdx) => (
-                          <Collapsible key={taskIdx} defaultOpen={taskIdx === 0} className="group/task">
-                            <CollapsibleTrigger className={cn(
-                              "w-full flex items-center justify-between gap-3 px-5 py-3.5 text-right transition-colors hover:bg-white/[0.02]",
+                          <AccordionItem key={taskIdx} value={`task-${taskIdx}`} className="border-b-0">
+                            <AccordionTrigger className={cn(
+                              "w-full flex items-center justify-between gap-3 px-5 py-3.5 text-right transition-colors hover:bg-white/[0.02] hover:no-underline",
                               "border-r-2", pal.taskBorder
                             )}>
-                              <span className="font-medium text-sm leading-snug">{task.title}</span>
-                              <div className="flex items-center gap-2 shrink-0">
-                                <span className={cn(
-                                  "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold",
-                                  pal.badge
-                                )}>
-                                  <Clock className="size-2.5" />
-                                  {task.duration}
-                                </span>
-                                <ChevronDown className="size-3.5 text-muted-foreground/50 transition-transform duration-200 group-data-[state=open]/task:rotate-180" />
-                              </div>
-                            </CollapsibleTrigger>
-                            <CollapsibleContent>
-                              <div className={cn("px-5 pb-4 pt-1 border-r-2", pal.taskBorder)}>
+                              <span className="font-medium text-sm leading-snug flex-1 text-right">{task.title}</span>
+                              <span className={cn(
+                                "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold shrink-0",
+                                pal.badge
+                              )}>
+                                <Clock className="size-2.5" />
+                                {task.duration}
+                              </span>
+                            </AccordionTrigger>
+                            <AccordionContent className={cn("border-r-2", pal.taskBorder)}>
+                              <div className="px-5 pb-4 pt-1">
                                 <p className="text-xs text-muted-foreground/60 mb-2 uppercase tracking-wider">الخطوات</p>
                                 <ol className="space-y-6">
                                   {task.steps.map((step, stepIdx) => (
@@ -789,10 +787,10 @@ function ActionPlanContent({ section }: { section: ReportSection }) {
                                   ))}
                                 </ol>
                               </div>
-                            </CollapsibleContent>
-                          </Collapsible>
+                            </AccordionContent>
+                          </AccordionItem>
                         ))}
-                      </div>
+                      </Accordion>
                     </div>
                   </div>
 
@@ -931,11 +929,10 @@ function DataSectionHeading({ label }: { label: string }) {
         className="shrink-0 flex items-center gap-1.5 text-xs font-semibold px-3 py-1 rounded-full border border-primary/20 bg-primary/5 text-primary/70"
         style={{ boxShadow: "0 0 12px rgba(46,91,255,0.15)" }}
       >
-        <span className="tracking-wide">{label}</span>
-        <span className="font-black tracking-[0.18em] text-primary">CBO.AI</span>
-        <span className="flex items-center justify-center size-4 rounded-[3px] border border-primary/30 bg-primary/15">
-          <TrendingUp className="size-2.5 text-primary" />
-        </span>
+        <span className="tracking-wide pt-1">{label}</span>
+        <span className="font-black tracking-[0.18em] text-primary pt-1">CBO.AI</span>
+          <img src="/logo-icon.png" alt="CBO.AI" className="size-4 object-contain" />
+      
       </span>
       <div className="flex-1 h-px bg-gradient-to-l from-transparent via-primary/30 to-primary/10" />
     </motion.div>
@@ -1192,10 +1189,11 @@ function SocialProfileCard({ profile }: { profile: CollectedSocialProfile }) {
           <div className="flex items-center gap-2.5">
             {/* Profile picture or platform icon fallback */}
             {profile.profilePicUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
+              <Image
                 src={profile.profilePicUrl}
                 alt={`@${profile.username}`}
+                width={64}
+                height={64}
                 className="size-16 rounded-full object-cover border shrink-0"
               />
             ) : (
@@ -1559,14 +1557,6 @@ function MarketDataSection({
 
   return (
     <div className="space-y-6" dir="rtl">
-      {/* Map */}
-      {location && (
-        <CompetitorMap
-          businessName={businessName ?? ''}
-          location={location}
-          competitors={competitors}
-        />
-      )}
 
       {/* Market Share Summary */}
       {marketData && (
@@ -1588,6 +1578,14 @@ function MarketDataSection({
             </div>
           </CardContent>
         </Card>
+      )}
+      {/* Map */}
+      {location && (
+        <CompetitorMap
+          businessName={businessName ?? ''}
+          location={location}
+          competitors={competitors}
+        />
       )}
 
       {/* Unified Competitor Table */}
@@ -1639,16 +1637,16 @@ function MarketDataSection({
             </div>
           </div>
         </CardHeader>
+        
         <CardContent className="p-0">
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead className="text-right w-16">الصورة</TableHead>
                 <TableHead className="text-right">الاسم</TableHead>
-                <TableHead className="text-right">النوع</TableHead>
                 <TableHead className="text-right">التقييم</TableHead>
                 <TableHead className="text-right">التقييمات</TableHead>
-                <TableHead className="text-right">حصة السوق</TableHead>
+                <TableHead className="text-right">حصة السوق (السمعة)</TableHead>
                 <TableHead className="text-right">السعر</TableHead>
               </TableRow>
             </TableHeader>
@@ -1658,7 +1656,7 @@ function MarketDataSection({
                   <TableCell>
                     {comp.photoUrl ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={comp.photoUrl} alt="" className="w-12 h-12 rounded-lg object-cover" />
+                      <Image src={comp.photoUrl} alt="" width={48} height={48} className="w-12 h-12 rounded-lg object-cover" />
                     ) : (
                       <div className="w-12 h-12 rounded-lg bg-muted flex items-center justify-center">
                         <Globe className="size-5 text-muted-foreground" />
@@ -1666,18 +1664,6 @@ function MarketDataSection({
                     )}
                   </TableCell>
                   <TableCell className="font-medium">{comp.name}</TableCell>
-                  <TableCell>
-                    <span className={cn(
-                      "inline-block rounded px-1.5 py-0.5 text-[10px] font-medium whitespace-nowrap",
-                      comp.competitorCategory === 'direct'
-                        ? "bg-red-500/15 text-red-500"
-                        : comp.competitorCategory === 'indirect'
-                          ? "bg-amber-500/15 text-amber-500"
-                          : "bg-muted text-muted-foreground"
-                    )}>
-                      {comp.competitorCategory === 'direct' ? 'مباشر' : comp.competitorCategory === 'indirect' ? 'غير مباشر' : '—'}
-                    </span>
-                  </TableCell>
                   <TableCell>
                     {comp.rating != null ? (
                       <span className="flex items-center gap-1">
@@ -1864,8 +1850,8 @@ function SectionNav({
           <div className="flex-1 min-w-0">
             <p className="text-[10px] text-muted-foreground/40 uppercase tracking-[0.2em] mb-1 text-left">التالي</p>
             <div className="flex items-center gap-1.5 justify-end">
-              <p className="text-sm font-semibold text-foreground/80 group-hover:text-foreground transition-colors truncate">{next.title}</p>
               <TabIcon sectionId={next.id} />
+              <p className="text-sm font-semibold text-foreground/80 group-hover:text-foreground transition-colors truncate">{next.title}</p>
             </div>
           </div>
           <ChevronLeft
@@ -1910,7 +1896,7 @@ export function ReportView({
   // Per-section accent color for the sliding indicator
   const SECTION_ACCENT: Record<string, string> = {
     financials:    "#10b981",
-    digital:       "#3b82f6",
+    digital:       "#06b6d4",
     market:        "#f97316",
     "action-plan": "#2E5BFF",
   };
@@ -1926,8 +1912,8 @@ export function ReportView({
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-1 flex-col overflow-hidden">
 
         {/* ── Tab bar ──────────────────────────────────────────────────────── */}
-        <div className="px-2 py-1.5 flex-shrink-0">
-          <TabsList className=" w-full justify-start gap-0 bg-transparent rounded-none">
+        <div className="px-2 py-1.5 flex-shrink-0 bg-white/[0.02] backdrop-blur-sm border-b border-white/[0.06]">
+          <TabsList className="w-full justify-start gap-1 bg-transparent rounded-none p-1">
 
             {/* Data tabs */}
             {tabSections.map((section) => {
@@ -1938,9 +1924,10 @@ export function ReportView({
                   key={section.id}
                   value={section.id}
                   className={cn(
-                    "relative h-11 rounded-none border-0 bg-transparent px-4 gap-2 text-sm transition-colors",
-                    "data-[state=active]:bg-transparent data-[state=active]:shadow-none",
-                    isActive ? "text-foreground" : "text-muted-foreground hover:text-foreground/70"
+                    "relative h-9 rounded-md px-4 gap-2 text-sm transition-all duration-200",
+                    isActive
+                      ? "bg-white/[0.07] text-foreground shadow-sm border border-white/[0.08]"
+                      : "bg-transparent text-muted-foreground border border-transparent hover:bg-white/[0.04] hover:text-foreground/70"
                   )}
                 >
                   <TabIcon sectionId={section.id} />
@@ -1948,7 +1935,7 @@ export function ReportView({
                   {isActive && (
                     <motion.div
                       layoutId="tab-indicator"
-                      className="absolute bottom-0 left-0 right-0 h-0.5 rounded-full"
+                      className="absolute bottom-0 left-1.5 right-1.5 h-0.5 rounded-full"
                       style={{ backgroundColor: accent }}
                       transition={{ type: "tween", stiffness: 380, damping: 40 }}
                     />
@@ -1967,9 +1954,10 @@ export function ReportView({
               <TabsTrigger
                 value={actionPlan.id}
                 className={cn(
-                  "relative h-11 rounded-none border-0 bg-transparent px-4 gap-2 text-sm transition-colors",
-                  "data-[state=active]:bg-transparent data-[state=active]:shadow-none",
-                  activeTab === actionPlan.id ? "text-primary" : "text-muted-foreground hover:text-primary/70"
+                  "relative h-9 rounded-md px-4 gap-2 text-sm transition-all duration-200",
+                  activeTab === actionPlan.id
+                    ? "bg-primary/10 text-primary shadow-sm border border-primary/20"
+                    : "bg-transparent text-muted-foreground border border-transparent hover:bg-white/[0.04] hover:text-primary/70"
                 )}
               >
                 <TabIcon sectionId="action-plan" />
@@ -1977,7 +1965,7 @@ export function ReportView({
                 {activeTab === actionPlan.id && (
                   <motion.div
                     layoutId="tab-indicator"
-                    className="absolute bottom-0 left-0 right-0 h-0.5 rounded-full bg-primary"
+                    className="absolute bottom-0 left-1.5 right-1.5 h-0.5 rounded-full bg-primary"
                     transition={{ type: "spring", stiffness: 380, damping: 30 }}
                   />
                 )}
@@ -1988,7 +1976,7 @@ export function ReportView({
             <TabsTrigger
               value="performance"
               disabled
-              className="relative h-11 rounded-none border-0 bg-transparent px-4 gap-2 text-sm text-muted-foreground/30 data-[state=active]:bg-transparent data-[state=active]:shadow-none cursor-not-allowed"
+              className="relative h-9 rounded-md border border-transparent bg-transparent px-4 gap-2 text-sm text-muted-foreground/30 cursor-not-allowed"
             >
               <TabIcon sectionId="performance" />
               مراقبة الأداء

@@ -22,5 +22,5 @@ export const socialEngagementAuditor = new Agent({
     **Output:**
     Your output MUST be a JSON object adhering to the provided schema.
   `,
-  model: 'openrouter/anthropic/claude-haiku-4-5',
+  model: 'openrouter/anthropic/claude-sonnet-4.6',
 });
